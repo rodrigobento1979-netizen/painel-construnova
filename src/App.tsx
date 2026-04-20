@@ -18,7 +18,10 @@ import {
   TrendingUp, 
   TrendingDown, 
   Trash2,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  Download,
+  X
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -41,6 +44,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { supabase } from './lib/supabase';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 /** Utility for Tailwind class merging */
 function cn(...inputs: ClassValue[]) {
@@ -91,6 +96,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Fetch Data from Supabase
   useEffect(() => {
@@ -301,6 +307,16 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
+            {activeTab === 'dashboard' && (
+              <button 
+                onClick={() => setIsReportModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-all shadow-lg shadow-indigo-500/20"
+              >
+                <FileText size={16} />
+                <span className="hidden sm:inline">Relatório</span>
+              </button>
+            )}
+
             <div className="flex bg-white/5 p-1 rounded-lg border border-white/10">
               <button 
                 onClick={() => setTheme('light')}
@@ -366,7 +382,198 @@ export default function App() {
           )}
         </div>
       </main>
+
+      <ReportModal 
+        isOpen={isReportModalOpen} 
+        onClose={() => setIsReportModalOpen(false)} 
+        entries={entries}
+        companies={companies}
+        selectedCompanyId={selectedCompanyId}
+      />
     </div>
+  );
+}
+
+// --- Sub-components ---
+
+function ReportModal({ isOpen, onClose, entries, companies, selectedCompanyId }: { 
+  isOpen: boolean, 
+  onClose: () => void,
+  entries: Entry[],
+  companies: Company[],
+  selectedCompanyId: string
+}) {
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [reportType, setReportType] = useState<'purchases' | 'sales' | 'both'>('both');
+
+  const selectedCompany = companies.find(c => c.id === selectedCompanyId);
+
+  const handleDownload = () => {
+    if (!selectedCompany) return;
+
+    const doc = new jsPDF();
+    const companyEntries = entries.filter(e => e.companyId === selectedCompanyId && e.year === year);
+    
+    try {
+      // Header
+      doc.setFontSize(20);
+      doc.text('Relatório Financeiro', 14, 22);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Empresa: ${selectedCompany.name}`, 14, 30);
+      doc.text(`CNPJ: ${selectedCompany.cnpj}`, 14, 35);
+      doc.text(`Ano de Referência: ${year}`, 14, 40);
+      doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 14, 45);
+
+      const tableData = MONTHS.map((monthName, index) => {
+        const entry = companyEntries.find(e => e.month === index);
+        const row: any[] = [monthName];
+        
+        if (reportType === 'purchases' || reportType === 'both') {
+          row.push(new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(entry?.purchases || 0));
+        }
+        
+        if (reportType === 'sales' || reportType === 'both') {
+          row.push(new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(entry?.sales || 0));
+        }
+
+        if (reportType === 'both') {
+          const balance = (entry?.sales || 0) - (entry?.purchases || 0);
+          row.push(new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(balance));
+        }
+
+        return row;
+      });
+
+      const headers = ['Mês'];
+      if (reportType === 'purchases' || reportType === 'both') headers.push('Compras');
+      if (reportType === 'sales' || reportType === 'both') headers.push('Vendas');
+      if (reportType === 'both') headers.push('Resultado');
+
+      autoTable(doc, {
+        startY: 55,
+        head: [headers],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] },
+        styles: { fontSize: 9 },
+        margin: { top: 55 },
+      });
+
+      // Totals
+      const totalPurchases = companyEntries.reduce((acc, curr) => acc + curr.purchases, 0);
+      const totalSales = companyEntries.reduce((acc, curr) => acc + curr.sales, 0);
+      
+      const docAny = doc as any;
+      const finalY = (docAny.lastAutoTable?.finalY || 55) + 10;
+      doc.setFontSize(12);
+      doc.setTextColor(0);
+      
+      let currentY = finalY;
+      if (reportType === 'purchases' || reportType === 'both') {
+        doc.text(`Total Compras: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalPurchases)}`, 14, currentY);
+        currentY += 7;
+      }
+      if (reportType === 'sales' || reportType === 'both') {
+        doc.text(`Total Vendas: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalSales)}`, 14, currentY);
+        currentY += 7;
+      }
+      if (reportType === 'both') {
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Resultado Final: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalSales - totalPurchases)}`, 14, currentY);
+      }
+
+      doc.save(`relatorio_${selectedCompany.name.toLowerCase().replace(/\s+/g, '_')}_${year}.pdf`);
+    } catch (err) {
+      console.error('Erro ao gerar PDF:', err);
+      alert('Erro ao gerar o PDF. Tente novamente.');
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="relative w-full max-w-md glass rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-white/10"
+          >
+            {/* Modal Header */}
+            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold">Gerar Relatório</h3>
+                <p className="text-xs opacity-50">Escolha o período e os dados para exportar</p>
+              </div>
+              <button 
+                onClick={onClose}
+                className="p-2 hover:bg-white/5 rounded-xl transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-widest font-bold opacity-50">Ano de Referência</label>
+                <select 
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 outline-none focus:border-indigo-500/50 transition-all font-medium appearance-none"
+                >
+                  {Array.from(new Set([...entries.map(e => e.year), new Date().getFullYear()])).sort((a,b) => b-a).map(y => (
+                    <option key={y} value={y} className="bg-slate-800 text-white">{y}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-widest font-bold opacity-50">Tipo de Dado</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { id: 'both', label: 'Ambos (Compras e Vendas)' },
+                    { id: 'sales', label: 'Apenas Vendas' },
+                    { id: 'purchases', label: 'Apenas Compras' }
+                  ].map((type) => (
+                    <button
+                      key={type.id}
+                      onClick={() => setReportType(type.id as any)}
+                      className={cn(
+                        "w-full py-3 px-4 rounded-xl text-sm font-bold transition-all border text-left",
+                        reportType === type.id 
+                          ? "bg-indigo-600/20 border-indigo-500 text-indigo-400" 
+                          : "bg-white/5 border-white/10 opacity-60 hover:opacity-100"
+                      )}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <button 
+                  onClick={handleDownload}
+                  className="w-full bg-indigo-600 text-white rounded-xl py-4 font-bold hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+                >
+                  <Download size={18} />
+                  Baixar Relatório (PDF)
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 }
 
