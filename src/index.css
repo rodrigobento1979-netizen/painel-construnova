@@ -26,18 +26,18 @@
   }
 
   .dark {
-    --background: #020617;
+    --background: #111827; /* Midnight Blue slightly lighter than previous #020617 */
     --foreground: #f8fafc;
-    --card: rgba(255, 255, 255, 0.03);
+    --card: rgba(255, 255, 255, 0.04);
     --card-foreground: #f8fafc;
-    --border: rgba(255, 255, 255, 0.08);
-    --input: rgba(255, 255, 255, 0.1);
-    --primary: #6366f1;
+    --border: rgba(255, 255, 255, 0.1);
+    --input: rgba(255, 255, 255, 0.12);
+    --primary: #818cf8;
     --primary-foreground: #ffffff;
-    --secondary: rgba(255, 255, 255, 0.05);
+    --secondary: rgba(255, 255, 255, 0.06);
     --secondary-foreground: #f8fafc;
-    --accent: rgba(99, 102, 241, 0.15);
-    --accent-foreground: #818cf8;
+    --accent: rgba(99, 102, 241, 0.2);
+    --accent-foreground: #a5b4fc;
     --muted: #94a3b8;
     --muted-foreground: #64748b;
   }
@@ -51,8 +51,8 @@
   .mesh-bg {
     @apply fixed inset-0 z-[-1] pointer-events-none;
     background: 
-      radial-gradient(circle at 20% 20%, rgba(79, 70, 229, 0.15) 0%, transparent 50%),
-      radial-gradient(circle at 80% 80%, rgba(192, 38, 211, 0.1) 0%, transparent 50%);
+      radial-gradient(circle at 20% 20%, rgba(79, 70, 229, 0.18) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(14, 165, 233, 0.12) 0%, transparent 50%);
   }
 }
 

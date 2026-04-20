@@ -252,11 +252,11 @@ export default function App() {
       {/* Sidebar */}
       <nav className="w-64 glass hidden md:flex flex-col sticky top-0 h-screen z-50">
         <div className="p-6">
-          <div className="flex items-center gap-3 mb-10">
+          <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-xl text-white shadow-lg shadow-indigo-500/20">
-              F
+              M
             </div>
-            <h1 className="font-bold text-xl tracking-tight">FinTrace</h1>
+            <h1 className="font-bold text-xl tracking-tight">Monitor</h1>
           </div>
           
           <div className="space-y-1">
@@ -288,14 +288,14 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 relative z-10 p-6 gap-6">
-        <header className="h-20 flex items-center justify-between px-2">
+        <header className="h-12 flex items-center justify-between px-2">
           <div className="md:hidden flex items-center gap-2">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-xl text-white">F</div>
-            <span className="font-bold text-xl">FinTrace</span>
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-xl text-white">M</div>
+            <span className="font-bold text-xl">Monitor</span>
           </div>
           
           <div className="hidden md:block">
-            <h2 className="text-3xl font-bold tracking-tight">
+            <h2 className="text-xl font-bold tracking-tight">
               {activeTab === 'dashboard' ? 'Painel Principal' : activeTab === 'companies' ? 'Empresas' : 'Lançamentos'}
             </h2>
           </div>
@@ -542,28 +542,28 @@ function DashboardView({
           <p className="text-sm opacity-40">Os gráficos serão gerados automaticamente.</p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4 h-full">
           {/* KPI Cards Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="glass p-5 rounded-2xl flex items-center gap-4 border border-white/5 shadow-lg shadow-black/10">
-              <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                <Calendar size={24} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="glass p-3 rounded-xl flex items-center gap-3 border border-white/5 shadow-lg shadow-black/10">
+              <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                <Calendar size={20} />
               </div>
               <div>
-                <p className="text-[10px] uppercase font-bold tracking-wider opacity-40">Melhor Mês</p>
-                <p className="text-xl font-bold text-white">
+                <p className="text-[9px] uppercase font-bold tracking-wider opacity-40">Melhor Mês</p>
+                <p className="text-lg font-bold text-white">
                   {kpis.bestMonth.name}
                 </p>
               </div>
             </div>
 
-            <div className="glass p-5 rounded-2xl flex items-center gap-4 border border-white/5 shadow-lg shadow-black/10">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                <History size={24} />
+            <div className="glass p-3 rounded-xl flex items-center gap-3 border border-white/5 shadow-lg shadow-black/10">
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                <History size={20} />
               </div>
               <div>
-                <p className="text-[10px] uppercase font-bold tracking-wider opacity-40">Média Vendas ({kpis.monthsWithData} meses)</p>
-                <p className="text-xl font-bold text-white">
+                <p className="text-[9px] uppercase font-bold tracking-wider opacity-40">Média Vendas ({kpis.monthsWithData} meses)</p>
+                <p className="text-lg font-bold text-white">
                   {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(kpis.avgMonthlySales)}
                 </p>
               </div>
@@ -571,32 +571,31 @@ function DashboardView({
           </div>
 
           {/* Top Section: Summary & Pie Chart */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 glass p-8 rounded-[var(--radius)] shadow-lg shadow-black/10 flex flex-col justify-center">
-              <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2 glass p-5 rounded-2xl shadow-lg shadow-black/10 flex flex-col justify-center">
+              <div className="space-y-4">
                 <div>
-                  <h3 className="text-2xl font-bold mb-1">Resumo Anual ({selectedYear})</h3>
-                  <p className="text-sm opacity-50 uppercase tracking-widest font-bold">Total Acumulado</p>
+                  <h3 className="text-lg font-bold">Resumo Anual ({selectedYear})</h3>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-8">
-                  <div className="space-y-2">
-                    <p className="text-xs font-bold opacity-40 uppercase tracking-tighter">Total Compras</p>
-                    <p className="text-3xl font-bold font-mono text-[#6366f1]">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">Total Compras</p>
+                    <p className="text-xl font-bold font-mono text-[#6366f1]">
                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pieData[0].value)}
                     </p>
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-xs font-bold opacity-40 uppercase tracking-tighter">Total Vendas</p>
-                    <p className="text-3xl font-bold font-mono text-[#10b981]">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">Total Vendas</p>
+                    <p className="text-xl font-bold font-mono text-[#10b981]">
                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pieData[1].value)}
                     </p>
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-white/5">
-                  <p className="text-sm">
-                    <span className="opacity-50">Resultado do Exercício: </span>
+                <div className="pt-3 border-t border-white/5">
+                  <p className="text-xs">
+                    <span className="opacity-50">Resultado: </span>
                     <span className={cn("font-bold", (pieData[1].value - pieData[0].value) >= 0 ? "text-emerald-400" : "text-red-400")}>
                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pieData[1].value - pieData[0].value)}
                     </span>
@@ -605,18 +604,18 @@ function DashboardView({
               </div>
             </div>
 
-            <div className="glass p-6 rounded-[var(--radius)] shadow-lg shadow-black/10 flex flex-col items-center">
-              <h3 className="text-sm font-bold uppercase tracking-widest opacity-50 mb-6">Distribuição Total</h3>
-              <div className="h-[250px] w-full">
+            <div className="glass p-4 rounded-2xl shadow-lg shadow-black/10 flex flex-col items-center justify-center">
+              <h3 className="text-[10px] font-bold uppercase tracking-widest opacity-50 mb-2">Distribuição</h3>
+              <div className="h-[120px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={pieData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={8}
+                      innerRadius={40}
+                      outerRadius={55}
+                      paddingAngle={4}
                       dataKey="value"
                       stroke="none"
                     >
@@ -624,22 +623,13 @@ function DashboardView({
                         <Cell key={`cell-${index}`} fill={entry.fill} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      formatter={(val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)}
-                      contentStyle={{ 
-                        backgroundColor: 'rgba(2, 6, 23, 0.9)', 
-                        backdropFilter: 'blur(10px)', 
-                        borderColor: 'rgba(255,255,255,0.1)', 
-                        borderRadius: '12px' 
-                      }}
-                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex gap-6 mt-4">
+              <div className="flex gap-4 mt-2">
                 {pieData.map((d, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs font-bold">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.fill }}></div>
+                  <div key={i} className="flex items-center gap-1.5 text-[10px] font-bold">
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: d.fill }}></div>
                     <span className="opacity-60">{d.name}</span>
                   </div>
                 ))}
@@ -648,26 +638,23 @@ function DashboardView({
           </div>
 
           {/* Bottom Chart Section: Monthly Bar & YoY Comparison */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
             {/* Monthly Comparison (Bars) */}
-            <div className="glass p-6 rounded-[var(--radius)] shadow-lg shadow-black/10">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h3 className="text-lg font-semibold">Valores por Mês ({selectedYear})</h3>
-                  <p className="text-sm opacity-50">Comparativo mensal de compras e vendas</p>
-                </div>
-                <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest font-bold opacity-60">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#6366f1]"></span>
+            <div className="glass p-4 rounded-2xl shadow-lg shadow-black/10 flex flex-col">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">Mensal ({selectedYear})</h3>
+                <div className="flex items-center gap-3 text-[9px] uppercase tracking-widest font-bold opacity-60">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#6366f1]"></span>
                     <span>Compras</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#10b981]"></span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
                     <span>Vendas</span>
                   </div>
                 </div>
               </div>
-              <div className="h-[350px] w-full">
+              <div className="flex-1 min-h-[180px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart3_Recharts data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
@@ -675,46 +662,42 @@ function DashboardView({
                       dataKey="name" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fontSize: 10, fill: 'var(--muted)', fontWeight: 600 }} 
-                      dy={10}
+                      tick={{ fontSize: 9, fill: 'var(--muted)', fontWeight: 600 }} 
                     />
                     <YAxis 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fontSize: 10, fill: 'var(--muted)', fontWeight: 600 }} 
+                      tick={{ fontSize: 9, fill: 'var(--muted)', fontWeight: 600 }} 
                       tickFormatter={(val) => `R$${val/1000}k`}
                     />
                     <Tooltip 
                       formatter={(val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)}
+                      cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
                       contentStyle={{ 
                         backgroundColor: 'rgba(2, 6, 23, 0.9)', 
                         backdropFilter: 'blur(10px)',
                         borderColor: 'rgba(255,255,255,0.1)', 
-                        borderRadius: '12px'
+                        borderRadius: '8px',
+                        fontSize: '10px'
                       }} 
                     />
-                    <Bar_Recharts dataKey="compras" fill="#6366f1" radius={[4, 4, 0, 0]} name="Compras" />
-                    <Bar_Recharts dataKey="vendas" fill="#10b981" radius={[4, 4, 0, 0]} name="Vendas" />
+                    <Bar_Recharts dataKey="compras" fill="#6366f1" radius={[2, 2, 0, 0]} name="Compras" />
+                    <Bar_Recharts dataKey="vendas" fill="#10b981" radius={[2, 2, 0, 0]} name="Vendas" />
                   </BarChart3_Recharts>
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* YoY Comparison (Growth Line) */}
-            <div className="glass p-6 rounded-[var(--radius)] shadow-lg shadow-black/10">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h3 className="text-lg font-semibold">Comparativo {selectedYear} vs {selectedYear - 1}</h3>
-                  <p className="text-sm opacity-50">Variação % mensal do volume total</p>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold opacity-60">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
-                    <span>Crescimento (%)</span>
-                  </div>
+            <div className="glass p-4 rounded-2xl shadow-lg shadow-black/10 flex flex-col">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">Crescimento %</h3>
+                <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest font-bold opacity-60">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                  <span>Var. %</span>
                 </div>
               </div>
-              <div className="h-[350px] w-full">
+              <div className="flex-1 min-h-[180px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={yoyData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
@@ -722,30 +705,31 @@ function DashboardView({
                       dataKey="name" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fontSize: 10, fill: 'var(--muted)', fontWeight: 600 }} 
-                      dy={10}
+                      tick={{ fontSize: 9, fill: 'var(--muted)', fontWeight: 600 }} 
                     />
                     <YAxis 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fontSize: 10, fill: 'var(--muted)', fontWeight: 600 }} 
+                      tick={{ fontSize: 9, fill: 'var(--muted)', fontWeight: 600 }} 
                       tickFormatter={(val) => `${val}%`}
                     />
                     <Tooltip 
                       formatter={(val: number) => `${val.toFixed(2)}%`}
+                      cursor={{ stroke: 'rgba(255, 255, 255, 0.1)', strokeWidth: 1 }}
                       contentStyle={{ 
                         backgroundColor: 'rgba(2, 6, 23, 0.9)', 
                         backdropFilter: 'blur(10px)',
                         borderColor: 'rgba(255,255,255,0.1)', 
-                        borderRadius: '12px'
+                        borderRadius: '8px',
+                        fontSize: '10px'
                       }} 
                     />
                     <Line 
                       type="monotone" 
                       dataKey="crescimento" 
                       stroke="#818cf8" 
-                      strokeWidth={3} 
-                      dot={{ r: 4, fill: '#818cf8', strokeWidth: 2, stroke: '#fff' }}
+                      strokeWidth={2} 
+                      dot={{ r: 3, fill: '#818cf8', strokeWidth: 1, stroke: '#fff' }}
                       name="Var. %"
                     />
                   </LineChart>
