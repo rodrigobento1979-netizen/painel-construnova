@@ -1278,3 +1278,5 @@ function EntryCard({ month, purchases, sales, onSave }: {
     </div>
   );
 }
+
+// Comentário de controle para sincronização com o GitHub - v1.0.1
