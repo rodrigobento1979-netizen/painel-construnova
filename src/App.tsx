@@ -68,6 +68,7 @@ interface Entry {
   month: number;
   purchases: number;
   sales: number;
+  updatedAt?: string;
 }
 
 type Tab = 'dashboard' | 'companies' | 'entries';
@@ -97,6 +98,21 @@ export default function App() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+
+  const lastUpdate = useMemo(() => {
+    const companyEntries = entries.filter(e => e.companyId === selectedCompanyId && e.updatedAt);
+    if (companyEntries.length === 0) return null;
+    
+    const dates = companyEntries
+      .map(e => {
+        const d = new Date(e.updatedAt!);
+        return isNaN(d.getTime()) ? null : d.getTime();
+      })
+      .filter((t): t is number => t !== null);
+
+    if (dates.length === 0) return null;
+    return new Date(Math.max(...dates));
+  }, [entries, selectedCompanyId]);
 
   // Fetch Data from Supabase
   useEffect(() => {
@@ -133,7 +149,8 @@ export default function App() {
           year: e.year,
           month: e.month,
           purchases: e.purchases,
-          sales: e.sales
+          sales: e.sales,
+          updatedAt: e.updated_at || e.created_at
         })));
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -234,7 +251,8 @@ export default function App() {
         year: updatedEntry.year,
         month: updatedEntry.month,
         purchases: updatedEntry.purchases,
-        sales: updatedEntry.sales
+        sales: updatedEntry.sales,
+        updatedAt: updatedEntry.updated_at || updatedEntry.created_at
       };
 
       setEntries(prev => {
@@ -284,6 +302,22 @@ export default function App() {
               active={activeTab === 'entries'} 
               onClick={() => setActiveTab('entries')} 
             />
+            
+            {selectedCompanyId && lastUpdate && (
+              <motion.div 
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-2 ml-4 flex items-center gap-2 py-1 px-2 rounded-lg bg-[#39ff14]/5 border border-[#39ff14]/10"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-[#39ff14] shadow-[0_0_5px_#39ff14] animate-pulse" />
+                <div className="flex flex-col leading-tight">
+                  <span className="text-[7px] font-black uppercase tracking-widest text-[#39ff14]/60">Sincronizado</span>
+                  <span className="text-[9px] font-mono font-bold text-[#39ff14]/80">
+                    {lastUpdate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                  </span>
+                </div>
+              </motion.div>
+            )}
           </div>
         </div>
         
@@ -680,12 +714,18 @@ function DashboardView({
 
     const avgMonthlySales = monthsWithData > 0 ? totalSales / monthsWithData : 0;
 
+    // Global Totals (All Companies)
+    const globalTotalPurchases = entries.filter(e => e.year === selectedYear).reduce((acc, curr) => acc + curr.purchases, 0);
+    const globalTotalSales = entries.filter(e => e.year === selectedYear).reduce((acc, curr) => acc + curr.sales, 0);
+
     return {
       bestMonth,
       avgMonthlySales,
-      monthsWithData
+      monthsWithData,
+      globalTotalPurchases,
+      globalTotalSales
     };
-  }, [pieData, chartData]);
+  }, [pieData, chartData, entries, selectedYear]);
 
   if (companies.length === 0) {
     return (
@@ -710,18 +750,20 @@ function DashboardView({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="space-y-6"
+      className="space-y-6 pb-20"
     >
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10 mb-6">
+      <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10 mb-6 relative">
         <div className="flex items-center gap-4 w-full md:w-auto">
-          <select 
-            value={selectedCompanyId}
-            onChange={(e) => setSelectedCompanyId(e.target.value)}
-            className="bg-white/5 border border-white/10 rounded-lg py-2 px-3 outline-none font-bold text-sm min-w-[200px] focus:border-indigo-500/50 transition-all"
-          >
-            <option value="" className="bg-slate-900">Selecione uma Empresa</option>
-            {companies.map(c => <option key={c.id} value={c.id} className="bg-slate-900">{c.name}</option>)}
-          </select>
+          <div className="flex flex-col gap-1.5 min-w-[200px]">
+            <select 
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg py-2 px-3 outline-none font-bold text-sm focus:border-indigo-500/50 transition-all cursor-pointer"
+            >
+              <option value="" className="bg-slate-900">Selecione uma Empresa</option>
+              {companies.map(c => <option key={c.id} value={c.id} className="bg-slate-900">{c.name}</option>)}
+            </select>
+          </div>
         </div>
         
         <div className="flex gap-2">
@@ -751,26 +793,49 @@ function DashboardView({
       ) : (
         <div className="space-y-4 h-full">
           {/* KPI Cards Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="glass p-3 rounded-xl flex items-center gap-3 border border-white/5 shadow-lg shadow-black/10">
-              <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                <Calendar size={20} />
+          <div className="grid grid-cols-3 gap-2">
+            <div className="glass p-2.5 rounded-xl flex items-center gap-2 border border-white/5 shadow-lg shadow-black/10">
+              <div className="w-9 h-9 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 shrink-0">
+                <Calendar size={18} />
               </div>
-              <div>
-                <p className="text-[9px] uppercase font-bold tracking-wider opacity-40">Melhor Mês</p>
-                <p className="text-lg font-bold text-white">
+              <div className="min-w-0">
+                <p className="text-[8px] uppercase font-bold tracking-wider opacity-40 truncate">Melhor Mês</p>
+                <p className="text-base font-bold text-white truncate">
                   {kpis.bestMonth.name}
                 </p>
               </div>
             </div>
 
-            <div className="glass p-3 rounded-xl flex items-center gap-3 border border-white/5 shadow-lg shadow-black/10">
-              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                <History size={20} />
+            <div className="glass p-2.5 rounded-xl flex items-center gap-2 border border-white/5 shadow-lg shadow-black/10">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                <Building2 size={18} />
               </div>
-              <div>
-                <p className="text-[9px] uppercase font-bold tracking-wider opacity-40">Média Vendas ({kpis.monthsWithData} meses)</p>
-                <p className="text-lg font-bold text-white">
+              <div className="min-w-0">
+                <p className="text-[8px] uppercase font-bold tracking-wider opacity-40 truncate">Total Consolidado (Geral)</p>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] font-bold text-emerald-400">V: </span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-400/90 truncate">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(kpis.globalTotalSales)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] font-bold text-indigo-400">C: </span>
+                    <span className="text-[10px] font-mono font-bold text-indigo-400/90 truncate">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(kpis.globalTotalPurchases)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="glass p-2.5 rounded-xl flex items-center gap-2 border border-white/5 shadow-lg shadow-black/10">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                <History size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[8px] uppercase font-bold tracking-wider opacity-40 truncate">Média Vendas ({kpis.monthsWithData} m)</p>
+                <p className="text-base font-bold text-white truncate">
                   {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(kpis.avgMonthlySales)}
                 </p>
               </div>
