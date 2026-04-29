@@ -278,6 +278,7 @@ export default function App() {
               M
             </div>
             <h1 className="font-bold text-xl tracking-tight">Monitor</h1>
+            <span className="text-[10px] font-mono opacity-20 ml-auto">v1.1.3</span>
           </div>
           
           <div className="space-y-1">
@@ -1298,4 +1299,4 @@ function EntryCard({ month, purchases, sales, onSave }: {
   );
 }
 
-// Comentário de controle para sincronização com o GitHub - v1.0.1
+// Comentário de controle para sincronização com o GitHub - v1.1.3
