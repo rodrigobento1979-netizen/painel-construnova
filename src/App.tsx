@@ -21,7 +21,8 @@ import {
   AlertCircle,
   FileText,
   Download,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -52,7 +53,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// --- Types ---
+// --- Tipos ---
 
 interface Company {
   id: string;
@@ -82,7 +83,7 @@ const MONTH_INITIALS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-// --- Main App Component ---
+// --- Componente Principal ---
 
 export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -99,67 +100,59 @@ export default function App() {
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
-  const lastUpdate = useMemo(() => {
-    const companyEntries = entries.filter(e => e.companyId === selectedCompanyId && e.updatedAt);
-    if (companyEntries.length === 0) return null;
-    
-    const dates = companyEntries
-      .map(e => {
-        const d = new Date(e.updatedAt!);
-        return isNaN(d.getTime()) ? null : d.getTime();
-      })
-      .filter((t): t is number => t !== null);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-    if (dates.length === 0) return null;
-    return new Date(Math.max(...dates));
-  }, [entries, selectedCompanyId]);
+  // Funções de Busca
+  const refreshData = async () => {
+    setLoading(true);
+    try {
+      const { data: companiesData, error: companiesError } = await supabase
+        .from('companies')
+        .select('*')
+        .order('name');
+      
+      if (companiesError) throw companiesError;
 
-  // Fetch Data from Supabase
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const { data: companiesData, error: companiesError } = await supabase
-          .from('companies')
-          .select('*')
-          .order('name');
-        
-        if (companiesError) throw companiesError;
+      const { data: entriesData, error: entriesError } = await supabase
+        .from('entries')
+        .select('*');
+      
+      if (entriesError) throw entriesError;
 
-        if (companiesData.length > 0 && !selectedCompanyId) {
-          setSelectedCompanyId(companiesData[0].id);
-        }
+      setCompanies(companiesData.map(c => ({
+        id: c.id,
+        name: c.name,
+        cnpj: c.cnpj,
+        color: c.color
+      })));
 
-        const { data: entriesData, error: entriesError } = await supabase
-          .from('entries')
-          .select('*');
-        
-        if (entriesError) throw entriesError;
+      setEntries(entriesData.map(e => ({
+        id: e.id,
+        companyId: e.company_id,
+        year: e.year,
+        month: e.month,
+        purchases: e.purchases,
+        sales: e.sales,
+        updatedAt: e.updated_at || e.created_at
+      })));
+      
+      const now = new Date();
+      setLastUpdate(now);
+      console.log("Data refreshed at:", now.toLocaleTimeString());
 
-        setCompanies(companiesData.map(c => ({
-          id: c.id,
-          name: c.name,
-          cnpj: c.cnpj,
-          color: c.color
-        })));
-
-        setEntries(entriesData.map(e => ({
-          id: e.id,
-          companyId: e.company_id,
-          year: e.year,
-          month: e.month,
-          purchases: e.purchases,
-          sales: e.sales,
-          updatedAt: e.updated_at || e.created_at
-        })));
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      } finally {
-        setLoading(false);
+      if (companiesData.length > 0 && !selectedCompanyId) {
+        setSelectedCompanyId(companiesData[0].id);
       }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    fetchData();
+  // Carregar dados iniciais
+  useEffect(() => {
+    refreshData();
   }, []);
 
   // Handle Theme
@@ -174,7 +167,7 @@ export default function App() {
 
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
 
-  // --- Handlers ---
+  // --- Funções de Manipulação ---
 
   const addCompany = async (name: string, cnpj: string) => {
     const newCompanyData = {
@@ -203,6 +196,7 @@ export default function App() {
         color: created.color
       };
       setCompanies(prev => [...prev, newCompany]);
+      setLastUpdate(new Date()); // Update sync time locally
       if (!selectedCompanyId) setSelectedCompanyId(newCompany.id);
     }
   };
@@ -220,6 +214,7 @@ export default function App() {
 
     setCompanies(prev => prev.filter(c => c.id !== id));
     setEntries(prev => prev.filter(e => e.companyId !== id));
+    setLastUpdate(new Date()); // Update sync time locally
     if (selectedCompanyId === id) setSelectedCompanyId('');
   };
 
@@ -229,7 +224,8 @@ export default function App() {
       year,
       month,
       purchases,
-      sales
+      sales,
+      updated_at: new Date().toISOString() // Force database timestamp update
     };
 
     const { data, error } = await supabase
@@ -255,6 +251,7 @@ export default function App() {
         updatedAt: updatedEntry.updated_at || updatedEntry.created_at
       };
 
+      setLastUpdate(new Date()); // Force immediate sync update on UI
       setEntries(prev => {
         const existingIndex = prev.findIndex(e => e.companyId === companyId && e.year === year && e.month === month);
         if (existingIndex > -1) {
@@ -273,7 +270,7 @@ export default function App() {
       {/* Background Mesh */}
       <div className="mesh-bg" />
 
-      {/* Sidebar */}
+      {/* Barra Lateral */}
       <nav className="w-64 glass hidden md:flex flex-col sticky top-0 h-screen z-50">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
@@ -286,7 +283,7 @@ export default function App() {
           <div className="space-y-1">
             <SidebarItem 
               icon={<LayoutDashboard size={20} />} 
-              label="Dashboard" 
+              label="Painel" 
               active={activeTab === 'dashboard'} 
               onClick={() => setActiveTab('dashboard')} 
             />
@@ -303,17 +300,18 @@ export default function App() {
               onClick={() => setActiveTab('entries')} 
             />
             
-            {selectedCompanyId && lastUpdate && (
+            {lastUpdate && (
               <motion.div 
-                initial={{ opacity: 0, y: -5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-2 ml-4 flex items-center gap-2 py-1 px-2 rounded-lg bg-[#39ff14]/5 border border-[#39ff14]/10"
+                key={lastUpdate.getTime()}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="mt-2 ml-4 flex items-center gap-2 py-1 px-3 rounded-lg bg-[#39ff14]/5 border border-[#39ff14]/20 shadow-[0_0_10px_rgba(57,255,20,0.05)]"
               >
-                <div className="w-1.5 h-1.5 rounded-full bg-[#39ff14] shadow-[0_0_5px_#39ff14] animate-pulse" />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#39ff14] shadow-[0_0_8px_#39ff14] animate-pulse" />
                 <div className="flex flex-col leading-tight">
                   <span className="text-[7px] font-black uppercase tracking-widest text-[#39ff14]/60">Sincronizado</span>
                   <span className="text-[9px] font-mono font-bold text-[#39ff14]/80">
-                    {lastUpdate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                    {lastUpdate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Sao_Paulo' })}
                   </span>
                 </div>
               </motion.div>
@@ -326,7 +324,7 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Main Content */}
+      {/* Conteúdo Principal */}
       <main className="flex-1 flex flex-col min-w-0 relative z-10 p-6 gap-6">
         <header className="h-12 flex items-center justify-between px-2">
           <div className="md:hidden flex items-center gap-2">
@@ -409,7 +407,8 @@ export default function App() {
                   setSelectedYear={setSelectedYear}
                   selectedCompanyId={selectedCompanyId}
                   setSelectedCompanyId={setSelectedCompanyId}
-                  onSave={saveEntry} 
+                  onSave={saveEntry}
+                  onRefresh={refreshData}
                 />
               )}
             </AnimatePresence>
@@ -632,7 +631,7 @@ function SidebarItem({ icon, label, active, onClick }: { icon: React.ReactNode, 
   );
 }
 
-// --- Views ---
+// --- Visualizações ---
 
 function DashboardView({ 
   companies, 
@@ -1111,7 +1110,8 @@ function EntriesView({
   setSelectedYear,
   selectedCompanyId,
   setSelectedCompanyId,
-  onSave 
+  onSave,
+  onRefresh
 }: { 
   companies: Company[], 
   entries: Entry[], 
@@ -1119,9 +1119,17 @@ function EntriesView({
   setSelectedYear: (y: number) => void,
   selectedCompanyId: string,
   setSelectedCompanyId: (id: string) => void,
-  onSave: (cId: string, y: number, m: number, p: number, s: number) => void 
+  onSave: (cId: string, y: number, m: number, p: number, s: number) => void,
+  onRefresh: () => Promise<void>
 }) {
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await onRefresh();
+    setTimeout(() => setIsRefreshing(false), 600);
+  };
 
   return (
     <motion.div 
@@ -1135,6 +1143,17 @@ function EntriesView({
           <div className="flex items-center gap-3">
             <Calendar className="text-indigo-400" />
             <h3 className="text-lg font-bold">Lançamentos Mensais ({selectedYear})</h3>
+            <button 
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className={cn(
+                "p-2 hover:bg-white/10 rounded-lg transition-all",
+                isRefreshing && "animate-spin opacity-50"
+              )}
+              title="Sincronizar agora"
+            >
+              <RefreshCw size={18} className="text-indigo-400" />
+            </button>
           </div>
           
           <div className="flex gap-2">
@@ -1190,7 +1209,7 @@ function EntriesView({
   );
 }
 
-// --- Utilities ---
+// --- Utilitários ---
 
 function formatCurrency(value: number | string): string {
   const amount = typeof value === 'number' ? value : (parseFloat(value.replace(/\D/g, '')) / 100);
