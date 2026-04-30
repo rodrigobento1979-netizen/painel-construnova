@@ -224,9 +224,16 @@ export default function App() {
       year,
       month,
       purchases,
-      sales,
-      updated_at: new Date().toISOString() // Force database timestamp update
+      sales
     };
+
+    console.log("Salvando valores:", {
+      company_id: companyId,
+      year,
+      month,
+      purchases,
+      sales
+    });
 
     const { data, error } = await supabase
       .from('entries')
@@ -235,7 +242,7 @@ export default function App() {
 
     if (error) {
       console.error('Error saving entry:', error);
-      alert('Erro ao salvar os dados. Verifique sua conexão ou as permissões do Supabase.');
+      alert('Erro ao salvar os dados. Verifique sua conexão ou se a tabela no Supabase possui as colunas compras e vendas.');
       return;
     }
 
@@ -248,10 +255,12 @@ export default function App() {
         month: updatedEntry.month,
         purchases: updatedEntry.purchases,
         sales: updatedEntry.sales,
-        updatedAt: updatedEntry.updated_at || updatedEntry.created_at
+        updatedAt: updatedEntry.created_at // Usando created_at como referência já que updated_at não existe
       };
 
-      setLastUpdate(new Date()); // Force immediate sync update on UI
+      const now = new Date();
+      setLastUpdate(now); // Força a atualização do "Sincronizado" na hora
+      console.log("Sync atualizado via salvamento em:", now.toLocaleTimeString());
       setEntries(prev => {
         const existingIndex = prev.findIndex(e => e.companyId === companyId && e.year === year && e.month === month);
         if (existingIndex > -1) {
@@ -1299,4 +1308,4 @@ function EntryCard({ month, purchases, sales, onSave }: {
   );
 }
 
-// Comentário de controle para sincronização com o GitHub - v1.1.3
+// Comentário de controle para sincronização com o GitHub - v1.1.4
