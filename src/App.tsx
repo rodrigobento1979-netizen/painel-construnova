@@ -287,7 +287,7 @@ export default function App() {
               M
             </div>
             <h1 className="font-bold text-xl tracking-tight">Monitor</h1>
-            <span className="text-[10px] font-mono opacity-20 ml-auto">v1.1.3</span>
+            <span className="text-[10px] font-mono opacity-20 ml-auto">v1.1.4</span>
           </div>
           
           <div className="space-y-1">
