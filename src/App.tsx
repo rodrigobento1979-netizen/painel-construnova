@@ -13,10 +13,10 @@ import {
   LayoutDashboard, 
   Moon, 
   Plus, 
-  Settings, 
   Sun, 
   TrendingUp, 
   TrendingDown, 
+  ChevronDown,
   Trash2,
   AlertCircle,
   FileText,
@@ -97,10 +97,36 @@ export default function App() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number | 'all'>(new Date().getMonth());
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+
+  // Cálculo de Proporção (Compras vs Vendas)
+  const stats = useMemo(() => {
+    if (!selectedCompanyId) return null;
+    
+    const companyYearEntries = entries.filter(e => e.companyId === selectedCompanyId && e.year === selectedYear);
+    
+    // Filtrar por mês se não for "Todos"
+    const filteredEntries = selectedMonth === 'all' 
+      ? companyYearEntries 
+      : companyYearEntries.filter(e => e.month === selectedMonth);
+
+    const totalPurchases = filteredEntries.reduce((acc, curr) => acc + curr.purchases, 0);
+    const totalSales = filteredEntries.reduce((acc, curr) => acc + curr.sales, 0);
+    
+    // Nova lógica sugerida pelo usuário: Compras / Vendas
+    const ratio = totalSales > 0 ? (totalPurchases / totalSales) * 100 : (totalPurchases > 0 ? 100 : 0);
+    
+    return {
+      totalPurchases,
+      totalSales,
+      ratio,
+      isMonthly: selectedMonth !== 'all'
+    };
+  }, [entries, selectedCompanyId, selectedYear, selectedMonth]);
 
   // Funções de Busca
   const refreshData = async () => {
@@ -275,19 +301,19 @@ export default function App() {
   };
 
   return (
-    <div className="flex min-h-screen bg-[var(--background)] text-[var(--foreground)] font-sans transition-colors duration-300 relative overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] font-sans transition-colors duration-300 relative">
       {/* Background Mesh */}
       <div className="mesh-bg" />
 
       {/* Barra Lateral */}
-      <nav className="w-64 glass hidden md:flex flex-col sticky top-0 h-screen z-50">
-        <div className="p-6">
+      <nav className="w-64 glass hidden md:flex flex-col h-full border-r border-[var(--border)] z-50 shrink-0">
+        <div className="p-5 flex-1 overflow-y-auto">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-xl text-white shadow-lg shadow-indigo-500/20">
               M
             </div>
             <h1 className="font-bold text-xl tracking-tight">Monitor</h1>
-            <span className="text-[10px] font-mono opacity-20 ml-auto">v1.1.4</span>
+            <span className="text-[10px] font-mono opacity-20 ml-auto">v1.1.4.1</span>
           </div>
           
           <div className="space-y-1">
@@ -326,16 +352,115 @@ export default function App() {
                 </div>
               </motion.div>
             )}
+
+            <div className="mt-4 px-4 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[8px] font-black uppercase tracking-widest opacity-40 ml-1">Período de Análise</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg py-2 px-3 text-[11px] text-white/80 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all appearance-none cursor-pointer"
+                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white' stroke-opacity='0.2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1rem' }}
+                >
+                  <option value="all" className="bg-[#0a0a0a]">Todos os meses</option>
+                  {[
+                    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+                  ].map((month, idx) => (
+                    <option key={idx} value={idx} className="bg-[#0a0a0a]">{month}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {stats && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                key={`stats-${selectedMonth}-${selectedYear}`}
+                className="mt-2 mx-3 p-3 rounded-xl bg-white/5 border border-white/10 shadow-lg relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-3xl -mr-12 -mt-12 pointer-events-none rounded-full" />
+                
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[8px] font-bold uppercase tracking-widest opacity-40">
+                    {stats.isMonthly ? `Eficiência Mensal` : `Eficiência Anual`}
+                  </span>
+                  <div className={cn(
+                    "px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider transition-colors",
+                    stats.ratio >= 60 
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                      : stats.ratio >= 45 
+                        ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                        : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                  )}>
+                    {stats.ratio >= 60 ? 'Meta Atingida' : stats.ratio >= 45 ? 'Em Evolução' : 'Abaixo da Meta'}
+                  </div>
+                </div>
+
+                <div className="flex flex-col">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className={cn(
+                      "text-3xl font-bold font-mono tracking-tighter leading-none transition-colors",
+                      stats.ratio >= 60 ? "text-emerald-400" : stats.ratio >= 45 ? "text-amber-400" : "text-rose-400"
+                    )}>
+                      {stats.ratio.toFixed(1)}%
+                    </span>
+                    <div className="text-right">
+                      <span className="text-[9px] opacity-30 block font-semibold uppercase tracking-widest">Objetivo</span>
+                      <span className="text-[10px] font-mono font-bold opacity-60">60.0%</span>
+                    </div>
+                  </div>
+                  
+                  {/* Barra de Progresso com Meta Destacada */}
+                  <div className="mt-6 relative">
+                    {/* Marcador de Meta Superior (Seta) */}
+                    <div className="absolute -top-4 left-[60%] -ml-1.5 flex flex-col items-center z-30">
+                      <ChevronDown size={10} className="text-white/80 animate-pulse" />
+                    </div>
+                    
+                    <div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden relative border border-white/5">
+                      {/* Linha da Meta interna */}
+                      <div className="absolute top-0 left-[60%] w-0.5 h-full bg-white/40 z-20 shadow-[0_0_8px_rgba(255,255,255,0.3)]" /> 
+                      
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(stats.ratio, 100)}%` }}
+                        className={cn(
+                          "h-full rounded-full transition-colors relative",
+                          stats.ratio >= 60 ? "bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]" : stats.ratio >= 45 ? "bg-amber-500" : "bg-rose-500"
+                        )}
+                      >
+                        <div className="absolute inset-0 bg-white/10 mix-blend-overlay" />
+                      </motion.div>
+                    </div>
+                  </div>
+                  <span className="text-[9px] opacity-30 mt-2 uppercase tracking-wider font-semibold">Proporção Compras sobre Vendas</span>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-white/5 grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[7px] font-black uppercase tracking-widest opacity-30">Total Vendas</span>
+                    <span className="text-xs font-mono font-medium text-white/80">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(stats.totalSales)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 text-right">
+                    <span className="text-[7px] font-black uppercase tracking-widest opacity-30">Total Compras</span>
+                    <span className="text-xs font-mono font-medium text-white/50">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(stats.totalPurchases)}
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
           </div>
         </div>
         
-        <div className="mt-auto p-6 border-t border-[var(--border)]">
-          <SidebarItem icon={<Settings size={20} />} label="Configurações" />
-        </div>
       </nav>
 
       {/* Conteúdo Principal */}
-      <main className="flex-1 flex flex-col min-w-0 relative z-10 p-6 gap-6">
+      <main className="flex-1 flex flex-col min-w-0 relative z-10 p-4 gap-4 overflow-y-auto">
         <header className="h-12 flex items-center justify-between px-2">
           <div className="md:hidden flex items-center gap-2">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-xl text-white">M</div>
@@ -759,9 +884,9 @@ function DashboardView({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="space-y-6 pb-20"
+      className="space-y-4"
     >
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10 mb-6 relative">
+      <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white/5 p-3 rounded-xl border border-white/10 mb-4 relative shrink-0">
         <div className="flex items-center gap-4 w-full md:w-auto">
           <div className="flex flex-col gap-1.5 min-w-[200px]">
             <select 
@@ -853,22 +978,22 @@ function DashboardView({
 
           {/* Top Section: Summary & Pie Chart */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 glass p-5 rounded-2xl shadow-lg shadow-black/10 flex flex-col justify-center">
-              <div className="space-y-4">
+            <div className="lg:col-span-2 glass p-4 rounded-2xl shadow-lg shadow-black/10 flex flex-col justify-center">
+              <div className="space-y-3">
                 <div>
-                  <h3 className="text-lg font-bold">Resumo Anual ({selectedYear})</h3>
+                  <h3 className="text-sm font-bold opacity-60 uppercase tracking-widest">Resumo Anual ({selectedYear})</h3>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">Total Compras</p>
-                    <p className="text-xl font-bold font-mono text-[#6366f1]">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-[9px] font-bold opacity-40 uppercase tracking-tighter">Total Compras</p>
+                    <p className="text-lg font-bold font-mono text-[#6366f1]">
                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pieData[0].value)}
                     </p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">Total Vendas</p>
-                    <p className="text-xl font-bold font-mono text-[#10b981]">
+                  <div className="space-y-0.5">
+                    <p className="text-[9px] font-bold opacity-40 uppercase tracking-tighter">Total Vendas</p>
+                    <p className="text-lg font-bold font-mono text-[#10b981]">
                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pieData[1].value)}
                     </p>
                   </div>
@@ -885,9 +1010,9 @@ function DashboardView({
               </div>
             </div>
 
-            <div className="glass p-4 rounded-2xl shadow-lg shadow-black/10 flex flex-col items-center justify-center">
-              <h3 className="text-[10px] font-bold uppercase tracking-widest opacity-50 mb-2">Distribuição</h3>
-              <div className="h-[120px] w-full">
+            <div className="glass p-3 rounded-2xl shadow-lg shadow-black/10 flex flex-col items-center justify-center">
+              <h3 className="text-[9px] font-bold uppercase tracking-widest opacity-50 mb-1">Distribuição</h3>
+              <div className="h-[100px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -935,7 +1060,7 @@ function DashboardView({
                   </div>
                 </div>
               </div>
-              <div className="flex-1 min-h-[180px]">
+              <div className="flex-1 min-h-[140px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart3_Recharts data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
@@ -978,7 +1103,7 @@ function DashboardView({
                   <span>Var. %</span>
                 </div>
               </div>
-              <div className="flex-1 min-h-[180px]">
+              <div className="flex-1 min-h-[140px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={yoyData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
@@ -1046,13 +1171,13 @@ function CompaniesView({ companies, onAdd, onRemove }: {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-6"
+      className="max-w-4xl mx-auto space-y-4"
     >
-      <div className="glass p-8 rounded-[var(--radius)] shadow-lg shadow-black/10">
-        <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+      <div className="glass p-5 rounded-[var(--radius)] shadow-lg shadow-black/10">
+        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
           <Plus className="w-5 h-5 text-indigo-400" /> Adicionar Nova Empresa
         </h3>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="text-[10px] uppercase tracking-widest font-bold opacity-50">Nome Fantasia</label>
             <input 
@@ -1148,11 +1273,11 @@ function EntriesView({
       exit={{ opacity: 0, x: 20 }}
       className="space-y-6"
     >
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 glass p-6 rounded-[var(--radius)] shadow-lg shadow-black/10">
-        <div className="flex flex-col gap-4 flex-1">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 glass p-4 rounded-[var(--radius)] shadow-lg shadow-black/10">
+        <div className="flex flex-col gap-2 flex-1">
           <div className="flex items-center gap-3">
-            <Calendar className="text-indigo-400" />
-            <h3 className="text-lg font-bold">Lançamentos Mensais ({selectedYear})</h3>
+            <Calendar className="text-indigo-400" size={20} />
+            <h3 className="text-base font-bold">Lançamentos ({selectedYear})</h3>
             <button 
               onClick={handleRefresh}
               disabled={isRefreshing}
@@ -1199,7 +1324,7 @@ function EntriesView({
           <p className="text-[var(--muted)]">Selecione uma empresa acima para realizar os lançamentos.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {MONTHS.map((month, idx) => {
             const entry = entries.find(e => e.companyId === selectedCompanyId && e.month === idx && e.year === selectedYear);
             return (
@@ -1308,4 +1433,4 @@ function EntryCard({ month, purchases, sales, onSave }: {
   );
 }
 
-// Comentário de controle para sincronização com o GitHub - v1.1.4
+// Comentário de controle para sincronização com o GitHub - v1.1.4.1
