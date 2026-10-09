@@ -1,6 +1,8 @@
 {
-  "name": "Gestão de Compras & Vendas",
-  "description": "Dashboard moderno para acompanhamento de evolução de compras e vendas por empresa, com suporte a temas claro e escuro.",
+  "name": "Monitor Financeiro Elite",
+  "description": "Sistema avançado de gestão financeira e monitoramento de lançamentos mensais, com indicadores de eficiência e relatórios automatizados.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

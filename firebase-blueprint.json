@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "Company": {
+      "title": "Company",
+      "description": "Empresa cadastrada no sistema de gestão fiscal",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador único da empresa"
+        },
+        "name": {
+          "type": "string",
+          "description": "Razão social ou nome fantasia da empresa",
+          "maxLength": 150
+        },
+        "cnpj": {
+          "type": "string",
+          "description": "CNPJ formatado da empresa",
+          "maxLength": 25
+        },
+        "color": {
+          "type": "string",
+          "description": "Cor de destaque no dashboard",
+          "maxLength": 30
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Data ISO de criação"
+        }
+      },
+      "required": ["name", "cnpj"]
+    },
+    "Entry": {
+      "title": "Entry",
+      "description": "Lançamento mensal de compras, vendas e status da empresa",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador único do lançamento"
+        },
+        "companyId": {
+          "type": "string",
+          "description": "ID da empresa associada"
+        },
+        "year": {
+          "type": "number",
+          "description": "Ano do exercício fiscal"
+        },
+        "month": {
+          "type": "number",
+          "description": "Mês do exercício (0 a 11)"
+        },
+        "purchases": {
+          "type": "number",
+          "description": "Total de compras no mês em R$"
+        },
+        "sales": {
+          "type": "number",
+          "description": "Total de vendas no mês em R$"
+        },
+        "notesCount": {
+          "type": "number",
+          "description": "Quantidade de notas fiscais processadas"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status de fechamento do mês",
+          "enum": ["CONCLUIDO", "AGUARDANDO", "EM ANDAMENTO"]
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Data ISO da última atualização"
+        }
+      },
+      "required": ["companyId", "year", "month", "status"]
+    }
+  },
+  "firestore": {
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Armazena as empresas cadastradas"
+    },
+    "/entries/{entryId}": {
+      "schema": "Entry",
+      "description": "Armazena os lançamentos mensais fiscais de compras e vendas"
+    }
+  }
+}

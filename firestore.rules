@@ -1,0 +1,65 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Deny Catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidCompany(data) {
+      return data.keys().hasAll(['name', 'cnpj'])
+        && data.keys().hasOnly(['id', 'name', 'cnpj', 'color', 'createdAt'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 150
+        && data.cnpj is string && data.cnpj.size() > 0 && data.cnpj.size() <= 25
+        && (!('color' in data) || (data.color is string && data.color.size() <= 30))
+        && (!('id' in data) || (data.id is string && data.id.size() <= 128));
+    }
+
+    function isValidEntry(data) {
+      return data.keys().hasAll(['companyId', 'year', 'month', 'status'])
+        && data.keys().hasOnly(['id', 'companyId', 'year', 'month', 'purchases', 'sales', 'notesCount', 'productsCount', 'status', 'updatedAt'])
+        && data.companyId is string && data.companyId.size() <= 128
+        && data.year is number && data.year >= 2000 && data.year <= 2100
+        && data.month is number && data.month >= 0 && data.month <= 11
+        && data.status is string && (data.status == 'CONCLUIDO' || data.status == 'AGUARDANDO' || data.status == 'EM ANDAMENTO')
+        && (!('purchases' in data) || data.purchases is number)
+        && (!('sales' in data) || data.sales is number)
+        && (!('notesCount' in data) || data.notesCount is number)
+        && (!('productsCount' in data) || data.productsCount is number);
+    }
+
+    // Collection companies
+    match /companies/{companyId} {
+      allow read: if true;
+      allow create: if isValidId(companyId) && isValidCompany(incoming());
+      allow update: if isValidId(companyId) && isValidCompany(incoming());
+      allow delete: if isValidId(companyId);
+    }
+
+    // Collection entries
+    match /entries/{entryId} {
+      allow read: if true;
+      allow create: if isValidId(entryId) && isValidEntry(incoming());
+      allow update: if isValidId(entryId) && isValidEntry(incoming());
+      allow delete: if isValidId(entryId);
+    }
+
+    // Health / connection test doc
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
