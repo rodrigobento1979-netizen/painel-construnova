@@ -53,8 +53,10 @@ import {
   Eye,
   EyeOff,
   Activity,
-  Check
+  Check,
+  Github
 } from 'lucide-react';
+import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { XMLParser } from 'fast-xml-parser';
 import { 
   AreaChart, 
@@ -192,6 +194,7 @@ export default function App() {
   const [isSidebarTopExpanded, setIsSidebarTopExpanded] = useState<boolean>(true);
   const [isSidebarBottomExpanded, setIsSidebarBottomExpanded] = useState<boolean>(true);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isGitModalOpen, setIsGitModalOpen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'local' | 'syncing'>('syncing');
 
@@ -866,6 +869,22 @@ export default function App() {
             )}
           </div>
 
+          {/* Botão de Sincronização com GitHub */}
+          <button
+            type="button"
+            onClick={() => setIsGitModalOpen(true)}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold bg-[#140524] hover:bg-[#250a40] border border-purple-800/60 text-purple-200 hover:text-white transition-all cursor-pointer shadow-xs group"
+            title="Informações e comandos para sincronizar com o GitHub"
+          >
+            <div className="flex items-center gap-1.5">
+              <Github size={13} className="text-purple-300 group-hover:text-white transition-colors" />
+              <span>Sincronizar GitHub</span>
+            </div>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/60 text-emerald-300 font-mono font-normal">
+              git: main
+            </span>
+          </button>
+
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-1 bg-[#140524] dark:bg-[#07010e] p-0.5 rounded-lg border border-purple-800/60 dark:border-purple-950">
               <button
@@ -984,6 +1003,17 @@ export default function App() {
               )}
             </button>
 
+            {/* Botão Sincronizar com GitHub */}
+            <button
+              onClick={() => setIsGitModalOpen(true)}
+              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-800 dark:text-slate-100 text-xs font-bold transition-all shadow-xs whitespace-nowrap cursor-pointer"
+              title="Informações e comandos para sincronizar com o GitHub"
+            >
+              <Github size={14} className="text-slate-900 dark:text-white" />
+              <span className="hidden sm:inline">Sincronizar GitHub</span>
+              <span className="sm:hidden">GitHub</span>
+            </button>
+
             {/* Botão de Relatório PDF */}
             <button
               onClick={() => setIsReportModalOpen(true)}
@@ -1098,6 +1128,12 @@ export default function App() {
         companies={companies}
         selectedCompanyId={selectedCompanyId}
         selectedYear={selectedYear}
+      />
+
+      {/* Modal de Sincronização com o GitHub */}
+      <GitHubSyncModal
+        isOpen={isGitModalOpen}
+        onClose={() => setIsGitModalOpen(false)}
       />
 
     </div>
