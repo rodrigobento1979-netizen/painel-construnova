@@ -122,3 +122,39 @@
 .dark .scrollbar-prominent::-webkit-scrollbar-thumb:hover {
   background: #6366f1;
 }
+
+/* Scrollbar com o mesmo tom roxo da barra lateral */
+.sidebar-purple-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(192, 132, 252, 0.35) transparent;
+}
+.sidebar-purple-scroll::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.sidebar-purple-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-purple-scroll::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.35);
+  border-radius: 9999px;
+  transition: background-color 0.2s;
+}
+.sidebar-purple-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(216, 180, 254, 0.7);
+}
+
+/* Garantir que todo container de rolagem dentro da aside roxa use o scrollbar roxo harmônico */
+aside ::-webkit-scrollbar {
+  width: 5px;
+}
+aside ::-webkit-scrollbar-track {
+  background: transparent;
+}
+aside ::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.35);
+  border-radius: 9999px;
+}
+aside ::-webkit-scrollbar-thumb:hover {
+  background: rgba(216, 180, 254, 0.7);
+}

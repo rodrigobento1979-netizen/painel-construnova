@@ -12,6 +12,7 @@ import {
   ChevronRight, 
   History, 
   LayoutDashboard, 
+  Minus,
   Moon, 
   Plus, 
   Sun, 
@@ -42,7 +43,17 @@ import {
   Percent,
   SlidersHorizontal,
   Sparkles,
-  Database
+  Database,
+  RotateCcw,
+  Zap,
+  Target,
+  MousePointerClick,
+  Sliders,
+  MoveHorizontal,
+  Eye,
+  EyeOff,
+  Activity,
+  Check
 } from 'lucide-react';
 import { XMLParser } from 'fast-xml-parser';
 import { 
@@ -60,7 +71,10 @@ import {
   Bar as Bar_Recharts,
   LineChart,
   Line,
-  Legend
+  Legend,
+  ComposedChart,
+  Brush,
+  ReferenceLine
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -114,7 +128,8 @@ export interface Entry {
 }
 
 type Tab = 'dashboard' | 'entries' | 'status' | 'companies';
-type ChartMode = 'bars' | 'area' | 'margin';
+type ChartMode = 'composed' | 'bars' | 'stacked' | 'area' | 'margin';
+type ChartPeriod = 'all' | 'sem1' | 'sem2' | 'q1' | 'q2' | 'q3' | 'q4';
 
 export const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -172,7 +187,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
-  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('all');
+  const [sidebarPosition, setSidebarPosition] = useState<'right' | 'left'>('left');
+  const [isSidebarTopExpanded, setIsSidebarTopExpanded] = useState<boolean>(true);
+  const [isSidebarBottomExpanded, setIsSidebarBottomExpanded] = useState<boolean>(true);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'local' | 'syncing'>('syncing');
@@ -227,7 +245,7 @@ export default function App() {
         // Se após filtrar dados demo houver empresas válidas, usa elas
         if (loaded.length > 0) {
           setCompanies(loaded);
-          setSelectedCompanyId(prev => prev && loaded.some(c => c.id === prev) ? prev : loaded[0]?.id || '');
+          setSelectedCompanyId(prev => (prev === 'all' || (prev && loaded.some(c => c.id === prev))) ? prev : 'all');
         } else {
           // Caso só restem dados brutos do Firestore
           const allDocs = snapshot.docs.map(docSnap => {
@@ -240,7 +258,7 @@ export default function App() {
             };
           });
           setCompanies(allDocs);
-          setSelectedCompanyId(prev => prev && allDocs.some(c => c.id === prev) ? prev : allDocs[0]?.id || '');
+          setSelectedCompanyId(prev => (prev === 'all' || (prev && allDocs.some(c => c.id === prev))) ? prev : 'all');
         }
       } else {
         setCompanies([]);
@@ -432,12 +450,26 @@ export default function App() {
     }
   };
 
-  const selectedCompany = companies.find(c => c.id === selectedCompanyId);
+  // Empresa Selecionada ou Consolidação Geral
+  const selectedCompany = useMemo(() => {
+    if (selectedCompanyId === 'all') {
+      const names = companies.map(c => c.name).join(' & ');
+      return {
+        id: 'all',
+        name: companies.length === 2 ? `Ambas as Empresas (${names})` : 'Consolidação Geral (Ambas as Empresas)',
+        cnpj: 'Grupo Empresarial Consolidado',
+        color: '#8b5cf6'
+      };
+    }
+    return companies.find(c => c.id === selectedCompanyId) || null;
+  }, [companies, selectedCompanyId]);
 
   // Estatísticas de Eficiência para a Barra Lateral
   const sidebarStats = useMemo(() => {
     if (!selectedCompanyId) return null;
-    const companyYearEntries = entries.filter(e => e.companyId === selectedCompanyId && e.year === selectedYear);
+    const companyYearEntries = selectedCompanyId === 'all'
+      ? entries.filter(e => e.year === selectedYear)
+      : entries.filter(e => e.companyId === selectedCompanyId && e.year === selectedYear);
     const filtered = selectedMonth === 'all'
       ? companyYearEntries
       : companyYearEntries.filter(e => e.month === selectedMonth);
@@ -452,213 +484,402 @@ export default function App() {
       totalSales,
       ratio,
       margin,
-      isMonthly: selectedMonth !== 'all'
+      isMonthly: selectedMonth !== 'all',
+      isConsolidated: selectedCompanyId === 'all'
     };
   }, [entries, selectedCompanyId, selectedYear, selectedMonth]);
 
   return (
     <div className={cn("flex h-screen w-full overflow-hidden bg-slate-50 dark:bg-[#090d16] text-slate-900 dark:text-slate-100 transition-colors duration-200", theme === 'dark' && "dark")}>
       
-      {/* ----------------- BARRA LATERAL (SIDEBAR) ----------------- */}
-      <aside className="w-64 md:w-72 border-r border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0d1322] flex flex-col h-full shrink-0 z-40 select-none">
+      {/* ----------------- BARRA LATERAL (SIDEBAR ESQUERDA / ROXA) ----------------- */}
+      <aside className={cn(
+        "w-64 md:w-72 flex flex-col h-full shrink-0 z-40 select-none transition-all duration-200",
+        "order-first border-r",
+        "bg-[#281145] text-white border-purple-900/50 shadow-xl",
+        "dark:bg-[#0e0719] dark:border-purple-950/70"
+      )}>
         
         {/* Brand Zone */}
-        <div className="p-5 border-b border-slate-200/80 dark:border-slate-800/60">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center font-bold text-lg shadow-sm shadow-indigo-500/30">
+        <div className="p-4 border-b border-purple-800/40 dark:border-purple-950/60 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-500 via-indigo-500 to-fuchsia-500 text-white flex items-center justify-center font-black text-lg shadow-md shadow-purple-950/60 shrink-0">
               M
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="font-extrabold text-base tracking-tight leading-none text-slate-900 dark:text-white truncate">
+              <span className="font-extrabold text-base tracking-tight leading-none text-white truncate">
                 Monitor Financeiro
               </span>
-              <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 tracking-wider uppercase mt-1">
+              <span className="text-[11px] font-semibold text-purple-300 tracking-wider uppercase mt-1">
                 Elite Enterprise
               </span>
             </div>
           </div>
         </div>
 
-        {/* Navigation Items */}
-        <div className="p-3 space-y-1">
-          <SidebarNavButton 
-            icon={<LayoutDashboard size={18} />} 
-            label="Painel Executivo" 
-            active={activeTab === 'dashboard'} 
-            onClick={() => setActiveTab('dashboard')} 
-          />
-          <SidebarNavButton 
-            icon={<History size={18} />} 
-            label="Lançamentos Mensais" 
-            active={activeTab === 'entries'} 
-            onClick={() => setActiveTab('entries')} 
-          />
-          <SidebarNavButton 
-            icon={<FileText size={18} />} 
-            label="Gestão de Itens & Status" 
-            active={activeTab === 'status'} 
-            onClick={() => setActiveTab('status')} 
-          />
-          <SidebarNavButton 
-            icon={<Building2 size={18} />} 
-            label="Empresas Cadastradas" 
-            active={activeTab === 'companies'} 
-            badge={companies.length.toString()}
-            onClick={() => setActiveTab('companies')} 
-          />
+        {/* Barra de Ações Rápidas: Alternar Foco entre Parte de Cima (Menu) e Parte de Baixo (Métricas) */}
+        <div className="px-3 py-1.5 flex items-center justify-between border-b border-purple-800/40 bg-purple-950/30 text-xs">
+          <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">
+            Painéis
+          </span>
+          <div className="flex items-center gap-1 bg-[#150629] p-0.5 rounded-lg border border-purple-800/50">
+            <button
+              type="button"
+              onClick={() => { setIsSidebarTopExpanded(true); setIsSidebarBottomExpanded(false); }}
+              className={cn(
+                "px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer",
+                isSidebarTopExpanded && !isSidebarBottomExpanded 
+                  ? "bg-purple-600 text-white shadow-xs" 
+                  : "text-purple-300 hover:text-white hover:bg-purple-800/40"
+              )}
+              title="Expandir Menu de Cima e minimizar parte de baixo"
+            >
+              Foco Menu
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsSidebarTopExpanded(false); setIsSidebarBottomExpanded(true); }}
+              className={cn(
+                "px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer",
+                !isSidebarTopExpanded && isSidebarBottomExpanded 
+                  ? "bg-purple-600 text-white shadow-xs" 
+                  : "text-purple-300 hover:text-white hover:bg-purple-800/40"
+              )}
+              title="Expandir Métricas de Baixo e minimizar menu de cima"
+            >
+              Foco Métricas
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsSidebarTopExpanded(true); setIsSidebarBottomExpanded(true); }}
+              className={cn(
+                "px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer",
+                isSidebarTopExpanded && isSidebarBottomExpanded 
+                  ? "bg-purple-600 text-white shadow-xs" 
+                  : "text-purple-300 hover:text-white hover:bg-purple-800/40"
+              )}
+              title="Expandir ambas as partes simultaneamente"
+            >
+              Ambos
+            </button>
+          </div>
         </div>
 
-        <div className="px-4 py-2">
-          <div className="h-px bg-slate-200/80 dark:bg-slate-800/60" />
+        {/* ----------------- PARTE DE CIMA: MENU DE NAVEGAÇÃO ----------------- */}
+        <div className="border-b border-purple-800/40 dark:border-purple-950/60">
+          <div className="flex items-center justify-between px-3.5 py-1.5">
+            <span className="text-[11px] font-extrabold text-purple-200 uppercase tracking-wider flex items-center gap-1.5">
+              <LayoutDashboard size={13} className="text-purple-300" />
+              Menu Principal
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !isSidebarTopExpanded;
+                setIsSidebarTopExpanded(next);
+                if (!next) setIsSidebarBottomExpanded(true);
+              }}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-900/60 hover:bg-purple-700/70 text-purple-200 hover:text-white border border-purple-700/50 transition-all cursor-pointer shadow-xs"
+              title={isSidebarTopExpanded ? "Minimizar menu de cima (abrir parte de baixo)" : "Expandir menu de cima"}
+            >
+              {isSidebarTopExpanded ? (
+                <>
+                  <Minus size={12} />
+                  <span>Minimizar</span>
+                </>
+              ) : (
+                <>
+                  <Plus size={12} className="text-emerald-300" />
+                  <span className="text-emerald-200">Expandir (+)</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {isSidebarTopExpanded ? (
+            <div className="px-3 pb-2 space-y-1">
+              <SidebarNavButton 
+                icon={<LayoutDashboard size={18} />} 
+                label="Painel Executivo" 
+                active={activeTab === 'dashboard'} 
+                onClick={() => setActiveTab('dashboard')} 
+              />
+              <SidebarNavButton 
+                icon={<History size={18} />} 
+                label="Lançamentos Mensais" 
+                active={activeTab === 'entries'} 
+                onClick={() => setActiveTab('entries')} 
+              />
+              <SidebarNavButton 
+                icon={<FileText size={18} />} 
+                label="Gestão de Itens & Status" 
+                active={activeTab === 'status'} 
+                onClick={() => setActiveTab('status')} 
+              />
+              <SidebarNavButton 
+                icon={<Building2 size={18} />} 
+                label="Empresas Cadastradas" 
+                active={activeTab === 'companies'} 
+                badge={companies.length.toString()}
+                onClick={() => setActiveTab('companies')} 
+              />
+            </div>
+          ) : (
+            <div className="px-3 py-1.5 flex items-center justify-between bg-purple-950/40 rounded-lg mx-2.5 mb-2 border border-purple-800/40">
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={() => setActiveTab('dashboard')} 
+                  className={cn("p-1.5 rounded-md transition-colors cursor-pointer", activeTab === 'dashboard' ? "bg-purple-600 text-white shadow-xs" : "text-purple-300 hover:text-white hover:bg-purple-800/40")} 
+                  title="Painel Executivo"
+                >
+                  <LayoutDashboard size={15} />
+                </button>
+                <button 
+                  onClick={() => setActiveTab('entries')} 
+                  className={cn("p-1.5 rounded-md transition-colors cursor-pointer", activeTab === 'entries' ? "bg-purple-600 text-white shadow-xs" : "text-purple-300 hover:text-white hover:bg-purple-800/40")} 
+                  title="Lançamentos Mensais"
+                >
+                  <History size={15} />
+                </button>
+                <button 
+                  onClick={() => setActiveTab('status')} 
+                  className={cn("p-1.5 rounded-md transition-colors cursor-pointer", activeTab === 'status' ? "bg-purple-600 text-white shadow-xs" : "text-purple-300 hover:text-white hover:bg-purple-800/40")} 
+                  title="Gestão de Itens & Status"
+                >
+                  <FileText size={15} />
+                </button>
+                <button 
+                  onClick={() => setActiveTab('companies')} 
+                  className={cn("p-1.5 rounded-md transition-colors cursor-pointer", activeTab === 'companies' ? "bg-purple-600 text-white shadow-xs" : "text-purple-300 hover:text-white hover:bg-purple-800/40")} 
+                  title="Empresas Cadastradas"
+                >
+                  <Building2 size={15} />
+                </button>
+              </div>
+              <button 
+                onClick={() => setIsSidebarTopExpanded(true)}
+                className="text-[10px] text-purple-200 hover:text-white flex items-center gap-1 font-bold bg-purple-800/60 hover:bg-purple-700/80 px-2 py-1 rounded-md transition-all cursor-pointer"
+                title="Expandir Menu completo"
+              >
+                <Plus size={11} className="text-emerald-300" />
+                <span>Mais</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Contextual Filters: Empresa & Período na Barra Lateral */}
-        <div className="px-4 py-2 space-y-3.5 flex-1 overflow-y-auto">
-          
-          {/* Seletor de Empresa */}
-          <div>
-            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1.5 uppercase tracking-wider">
-              Empresa em Foco
-            </label>
-            <select
-              value={selectedCompanyId}
-              onChange={(e) => setSelectedCompanyId(e.target.value)}
-              className="w-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 rounded-lg py-2 px-3 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all cursor-pointer"
+        {/* ----------------- PARTE DE BAIXO: FILTROS & MÉTRICAS ----------------- */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-3.5 py-1.5 border-b border-purple-800/30">
+            <span className="text-[11px] font-extrabold text-purple-200 uppercase tracking-wider flex items-center gap-1.5">
+              <SlidersHorizontal size={13} className="text-purple-300" />
+              Filtros & Métricas
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !isSidebarBottomExpanded;
+                setIsSidebarBottomExpanded(next);
+                if (!next) setIsSidebarTopExpanded(true);
+              }}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-900/60 hover:bg-purple-700/70 text-purple-200 hover:text-white border border-purple-700/50 transition-all cursor-pointer shadow-xs"
+              title={isSidebarBottomExpanded ? "Minimizar parte de baixo (abrir menu de cima)" : "Expandir filtros e métricas (+)"}
             >
-              {companies.length === 0 && <option value="">Nenhuma empresa</option>}
-              {companies.map(c => (
-                <option key={c.id} value={c.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              {isSidebarBottomExpanded ? (
+                <>
+                  <Minus size={12} />
+                  <span>Minimizar</span>
+                </>
+              ) : (
+                <>
+                  <Plus size={12} className="text-emerald-300" />
+                  <span className="text-emerald-200">Expandir (+)</span>
+                </>
+              )}
+            </button>
           </div>
 
-          {/* Seletor de Período (Mês) */}
-          <div>
-            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1.5 uppercase tracking-wider">
-              Filtro por Período
-            </label>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-              className="w-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 rounded-lg py-2 px-3 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all cursor-pointer"
-            >
-              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-                Consolidado Anual ({selectedYear})
-              </option>
-              {MONTHS.map((m, idx) => (
-                <option key={idx} value={idx} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-                  {m} / {selectedYear}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Cartão de Eficiência / Meta Orçamentária */}
-          {sidebarStats && (
-            <div className="p-3.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-700/50 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                  Eficiência {sidebarStats.isMonthly ? 'do Mês' : 'do Ano'}
-                </span>
-                <span className={cn(
-                  "text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider",
-                  sidebarStats.ratio <= 60 
-                    ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400" 
-                    : sidebarStats.ratio <= 75 
-                      ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400" 
-                      : "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400"
-                )}>
-                  {sidebarStats.ratio <= 60 ? 'Saudável' : sidebarStats.ratio <= 75 ? 'Alerta' : 'Crítico'}
-                </span>
+          {isSidebarBottomExpanded ? (
+            <div className="px-3.5 py-2.5 space-y-3 flex-1 overflow-y-auto sidebar-purple-scroll">
+              
+              {/* Seletor de Empresa com Opção de Consolidação */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-bold text-purple-200 uppercase tracking-wider block">
+                    Empresa em Foco
+                  </label>
+                  {selectedCompanyId === 'all' && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/30 text-purple-200 border border-purple-400/40">
+                      Consolidado
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={selectedCompanyId}
+                  onChange={(e) => setSelectedCompanyId(e.target.value)}
+                  className="w-full bg-[#1b0a33] dark:bg-[#120822] border border-purple-700/60 dark:border-purple-900/60 rounded-xl py-2 px-3 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-purple-400 transition-all cursor-pointer"
+                >
+                  <option value="all" className="bg-[#1b0a33] dark:bg-[#120822] text-white font-bold">
+                    🏢 Ambas as Empresas (Consolidação Geral)
+                  </option>
+                  {companies.map(c => (
+                    <option key={c.id} value={c.id} className="bg-[#1b0a33] dark:bg-[#120822] text-white">
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className="flex items-baseline justify-between">
-                <div className="text-2xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
-                  {sidebarStats.ratio.toFixed(1)}%
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold uppercase tracking-wider block">Meta Máx.</span>
-                  <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">60.0%</span>
-                </div>
+              {/* Seletor de Período (Mês) */}
+              <div>
+                <label className="text-[11px] font-bold text-purple-200 uppercase tracking-wider block mb-1.5">
+                  Filtro por Período
+                </label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+                  className="w-full bg-[#1b0a33] dark:bg-[#120822] border border-purple-700/60 dark:border-purple-900/60 rounded-xl py-2 px-3 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-purple-400 transition-all cursor-pointer"
+                >
+                  <option value="all" className="bg-[#1b0a33] dark:bg-[#120822] text-white font-bold">
+                    Consolidado Anual ({selectedYear})
+                  </option>
+                  {MONTHS.map((m, idx) => (
+                    <option key={idx} value={idx} className="bg-[#1b0a33] dark:bg-[#120822] text-white">
+                      {m} / {selectedYear}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Barra de Progresso com Marcador */}
-              <div className="space-y-1">
-                <div className="h-2 w-full bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden relative">
-                  <div 
-                    className={cn(
-                      "h-full rounded-full transition-all duration-500",
+              {/* Cartão de Eficiência / Meta Orçamentária */}
+              {sidebarStats && (
+                <div className="p-3.5 rounded-xl bg-[#1b0833]/95 dark:bg-[#120722]/95 border border-purple-800/50 dark:border-purple-900/40 space-y-2.5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-purple-200 uppercase tracking-wider">
+                      Eficiência {sidebarStats.isMonthly ? 'do Mês' : 'do Ano'}
+                    </span>
+                    <span className={cn(
+                      "text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border",
                       sidebarStats.ratio <= 60 
-                        ? "bg-emerald-500" 
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" 
                         : sidebarStats.ratio <= 75 
-                          ? "bg-amber-500" 
-                          : "bg-rose-500"
-                    )}
-                    style={{ width: `${Math.min(sidebarStats.ratio, 100)}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] font-medium text-slate-600 dark:text-slate-300">
-                  <span>0%</span>
-                  <span className="font-bold text-indigo-700 dark:text-indigo-400">Meta: 60%</span>
-                  <span>100%</span>
-                </div>
-              </div>
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/40" 
+                          : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                    )}>
+                      {sidebarStats.ratio <= 60 ? 'Saudável' : sidebarStats.ratio <= 75 ? 'Alerta' : 'Crítico'}
+                    </span>
+                  </div>
 
-              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/40 grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-600 dark:text-slate-300 block uppercase font-medium">Vendas</span>
-                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 truncate block">
-                    {formatCompactBRL(sidebarStats.totalSales)}
-                  </span>
+                  <div className="flex items-baseline justify-between">
+                    <div className="text-2xl font-black font-mono tabular-nums text-white">
+                      {sidebarStats.ratio.toFixed(1)}%
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-purple-300 font-semibold uppercase tracking-wider block">Meta Máx.</span>
+                      <span className="text-xs font-mono font-bold text-white">60.0%</span>
+                    </div>
+                  </div>
+
+                  {/* Barra de Progresso com Marcador */}
+                  <div className="space-y-1">
+                    <div className="h-2 w-full bg-[#110420] dark:bg-[#090212] rounded-full overflow-hidden relative border border-purple-900/60">
+                      <div 
+                        className={cn(
+                          "h-full rounded-full transition-all duration-500",
+                          sidebarStats.ratio <= 60 
+                            ? "bg-emerald-400" 
+                            : sidebarStats.ratio <= 75 
+                              ? "bg-amber-400" 
+                              : "bg-rose-400"
+                        )}
+                        style={{ width: `${Math.min(sidebarStats.ratio, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] font-medium text-purple-300">
+                      <span>0%</span>
+                      <span className="font-bold text-purple-200">Meta: 60%</span>
+                      <span>100%</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-purple-800/40 dark:border-purple-900/40 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[10px] text-purple-300 block uppercase font-medium">Vendas</span>
+                      <span className="font-mono font-bold text-emerald-300 truncate block">
+                        {formatCompactBRL(sidebarStats.totalSales)}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-purple-300 block uppercase font-medium">Compras</span>
+                      <span className="font-mono font-bold text-purple-200 truncate block">
+                        {formatCompactBRL(sidebarStats.totalPurchases)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-600 dark:text-slate-300 block uppercase font-medium">Compras</span>
-                  <span className="font-mono font-bold text-slate-700 dark:text-slate-300 truncate block">
-                    {formatCompactBRL(sidebarStats.totalPurchases)}
-                  </span>
+              )}
+
+            </div>
+          ) : (
+            <div className="p-3 mx-2.5 my-2 rounded-xl bg-[#1b0833]/90 border border-purple-800/50 flex items-center justify-between shadow-xs">
+              <div className="min-w-0 pr-2">
+                <div className="flex items-center gap-1.5 text-xs text-white font-bold truncate">
+                  <Building2 size={13} className="text-purple-300 shrink-0" />
+                  <span className="truncate">{selectedCompany?.name || 'Consolidação Geral'}</span>
                 </div>
+                {sidebarStats && (
+                  <span className="text-[10px] text-purple-200 font-mono font-bold block mt-0.5">
+                    Eficiência: {sidebarStats.ratio.toFixed(1)}% ({sidebarStats.ratio <= 60 ? 'Saudável' : 'Alerta'})
+                  </span>
+                )}
               </div>
+              <button
+                onClick={() => setIsSidebarBottomExpanded(true)}
+                className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1 shrink-0 shadow-sm transition-all cursor-pointer"
+                title="Abrir filtros e métricas completas"
+              >
+                <Plus size={13} className="text-emerald-300" />
+                <span>Mais</span>
+              </button>
             </div>
           )}
 
         </div>
 
         {/* Footer da Barra Lateral (Status de Sincronia e Tema) */}
-        <div className="p-3 border-t border-slate-200/80 dark:border-slate-800/60 bg-slate-50/50 dark:bg-[#0a0f1d] space-y-2">
+        <div className="p-3 border-t border-purple-800/40 dark:border-purple-950/60 bg-[#1d0a35]/60 dark:bg-[#090313] space-y-2">
           
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
+          <div className="flex items-center justify-between text-xs text-purple-300 px-1">
             <div className="flex items-center gap-1.5">
               <span className={cn(
                 "w-2 h-2 rounded-full",
-                syncStatus === 'synced' ? "bg-emerald-500 shadow-sm shadow-emerald-500/50" : syncStatus === 'syncing' ? "bg-amber-400 animate-ping" : "bg-indigo-400"
+                syncStatus === 'synced' ? "bg-emerald-400 shadow-sm shadow-emerald-400/50" : syncStatus === 'syncing' ? "bg-amber-400 animate-ping" : "bg-purple-300"
               )} />
-              <span className="font-medium text-[11px]">
-                {syncStatus === 'synced' ? 'Firebase Firestore Ativo' : syncStatus === 'syncing' ? 'Sincronizando' : 'Modo Operacional'}
+              <span className="font-medium text-[11px] text-purple-200">
+                {syncStatus === 'synced' ? 'Firebase Conectado' : syncStatus === 'syncing' ? 'Sincronizando' : 'Modo Operacional'}
               </span>
             </div>
             {lastUpdate && (
-              <span className="font-mono text-[10px] opacity-75 tabular-nums">
+              <span className="font-mono text-[10px] text-purple-300 tabular-nums">
                 {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
           </div>
 
           <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-1 bg-slate-200/80 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-300/70 dark:border-slate-700">
+            <div className="flex items-center gap-1 bg-[#140524] dark:bg-[#07010e] p-0.5 rounded-lg border border-purple-800/60 dark:border-purple-950">
               <button
                 type="button"
                 onClick={() => setTheme('light')}
                 className={cn(
                   "p-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer",
                   theme === 'light' 
-                    ? "bg-white text-slate-900 shadow-sm" 
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                    ? "bg-purple-600 text-white shadow-xs font-bold" 
+                    : "text-purple-300 hover:text-white"
                 )}
                 title="Modo Claro"
               >
-                <Sun size={14} className={cn(theme === 'light' ? "text-amber-500" : "text-slate-400")} />
+                <Sun size={14} className={cn(theme === 'light' ? "text-amber-300" : "text-purple-300")} />
                 <span>Claro</span>
               </button>
               <button
@@ -667,12 +888,12 @@ export default function App() {
                 className={cn(
                   "p-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer",
                   theme === 'dark' 
-                    ? "bg-indigo-600 text-white shadow-sm" 
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                    ? "bg-purple-600 text-white shadow-xs font-bold" 
+                    : "text-purple-300 hover:text-white"
                 )}
                 title="Modo Escuro"
               >
-                <Moon size={14} className={cn(theme === 'dark' ? "text-white" : "text-slate-400")} />
+                <Moon size={14} className={cn(theme === 'dark' ? "text-white" : "text-purple-300")} />
                 <span>Escuro</span>
               </button>
             </div>
@@ -680,10 +901,10 @@ export default function App() {
             <button
               onClick={refreshData}
               disabled={loading}
-              className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/60 transition-colors"
+              className="p-2 rounded-lg text-purple-300 hover:text-white hover:bg-purple-800/40 transition-colors cursor-pointer"
               title="Atualizar dados agora"
             >
-              <RefreshCw size={15} className={cn(loading && "animate-spin text-indigo-600")} />
+              <RefreshCw size={15} className={cn(loading && "animate-spin text-white")} />
             </button>
           </div>
 
@@ -692,15 +913,15 @@ export default function App() {
       </aside>
 
       {/* ----------------- ÁREA DE CONTEÚDO PRINCIPAL ----------------- */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden order-2">
         
-        {/* Top Header Bar Contract */}
+        {/* Top Header Bar */}
         <header className="h-16 border-b border-slate-200 dark:border-slate-800/80 bg-white/80 dark:bg-[#0d1322]/80 backdrop-blur-md px-6 flex items-center justify-between shrink-0 z-30">
           
           {/* Breadcrumb Trail */}
           <div className="flex items-center gap-2 text-xs">
-            <span className="font-semibold text-slate-600 dark:text-slate-300">Monitor Financeiro</span>
-            <span className="text-slate-600 dark:text-slate-300">/</span>
+            <span className="font-semibold text-slate-500 dark:text-slate-400">Monitor Financeiro</span>
+            <span className="text-slate-400 dark:text-slate-600">/</span>
             <span className="font-bold text-slate-900 dark:text-white">
               {activeTab === 'dashboard' && 'Painel Executivo'}
               {activeTab === 'entries' && 'Lançamentos Mensais'}
@@ -709,8 +930,13 @@ export default function App() {
             </span>
             {selectedCompany && (
               <>
-                <span className="text-slate-600 dark:text-slate-300">/</span>
-                <span className="font-medium text-indigo-600 dark:text-indigo-400 truncate max-w-[180px]">
+                <span className="text-slate-400 dark:text-slate-600">/</span>
+                <span className={cn(
+                  "font-bold truncate max-w-[240px] px-2 py-0.5 rounded-md",
+                  selectedCompanyId === 'all'
+                    ? "bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60"
+                    : "text-indigo-600 dark:text-indigo-400"
+                )}>
                   {selectedCompany.name}
                 </span>
               </>
@@ -718,7 +944,7 @@ export default function App() {
           </div>
 
           {/* Top Actions: Year Selector & Quick Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             
             {/* Seletor de Ano Rápido */}
             <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700/60 text-xs font-semibold">
@@ -775,7 +1001,7 @@ export default function App() {
                 </div>
                 <button
                   onClick={logoutUser}
-                  className="text-[11px] font-semibold text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors hidden md:inline"
+                  className="text-[11px] font-semibold text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors hidden md:inline cursor-pointer"
                   title="Encerrar sessão"
                 >
                   Sair
@@ -784,7 +1010,7 @@ export default function App() {
             ) : (
               <button
                 onClick={loginWithGoogle}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-all"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-all cursor-pointer"
                 title="Conectar com conta Google"
               >
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -901,32 +1127,75 @@ function ModernDashboardView({
   onOpenReport: () => void,
   onNavigateTab: (tab: Tab) => void
 }) {
-  const [chartMode, setChartMode] = useState<ChartMode>('bars');
+  // Estados de Interatividade e Animação do Gráfico
+  const [chartMode, setChartMode] = useState<ChartMode>('composed');
+  const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('all');
+  const [isShaking, setIsShaking] = useState(false);
+  const [animTrigger, setAnimTrigger] = useState(0);
+  const [showBrush, setShowBrush] = useState(false);
+  const [focusedMonthIndex, setFocusedMonthIndex] = useState<number | null>(null);
+  const [showTargetSimulator, setShowTargetSimulator] = useState(false);
+  const [targetGoal, setTargetGoal] = useState<number>(0);
+  const [visibleSeries, setVisibleSeries] = useState({
+    vendas: true,
+    compras: true,
+    margem: true,
+  });
+
+  const isConsolidated = selectedCompanyId === 'all';
 
   const filteredEntries = useMemo(() => {
     if (!selectedCompanyId) return [];
+    if (selectedCompanyId === 'all') {
+      return entries.filter(e => e.year === selectedYear);
+    }
     return entries.filter(e => e.companyId === selectedCompanyId && e.year === selectedYear);
   }, [entries, selectedCompanyId, selectedYear]);
 
   // YoY entries (Ano Anterior)
   const prevYearEntries = useMemo(() => {
     if (!selectedCompanyId) return [];
+    if (selectedCompanyId === 'all') {
+      return entries.filter(e => e.year === selectedYear - 1);
+    }
     return entries.filter(e => e.companyId === selectedCompanyId && e.year === selectedYear - 1);
   }, [entries, selectedCompanyId, selectedYear]);
 
-  // Dados para gráficos mensais (12 meses)
+  // Dados para gráficos mensais (12 meses com Consolidação das Empresas)
   const monthlyData = useMemo(() => {
     return MONTHS.map((name, index) => {
-      const entry = filteredEntries.find(e => e.month === index);
-      const prevEntry = prevYearEntries.find(e => e.month === index);
+      const monthEntries = filteredEntries.filter(e => e.month === index);
+      const prevMonthEntries = prevYearEntries.filter(e => e.month === index);
 
-      const compras = entry?.purchases || 0;
-      const vendas = entry?.sales || 0;
+      const compras = monthEntries.reduce((acc, curr) => acc + curr.purchases, 0);
+      const vendas = monthEntries.reduce((acc, curr) => acc + curr.sales, 0);
       const margem = vendas - compras;
       const margemPct = vendas > 0 ? (margem / vendas) * 100 : 0;
       const proporcao = vendas > 0 ? (compras / vendas) * 100 : (compras > 0 ? 100 : 0);
 
-      const prevTotal = (prevEntry?.sales || 0) - (prevEntry?.purchases || 0);
+      const notas = monthEntries.reduce((acc, curr) => acc + curr.notesCount, 0);
+      const produtos = monthEntries.reduce((acc, curr) => acc + curr.productsCount, 0);
+
+      const allConcluded = monthEntries.length > 0 && monthEntries.every(e => e.status === 'CONCLUIDO');
+      const anyInProgress = monthEntries.some(e => e.status === 'EM ANDAMENTO');
+      const status: Entry['status'] = allConcluded ? 'CONCLUIDO' : (anyInProgress ? 'EM ANDAMENTO' : 'AGUARDANDO');
+
+      const prevCompras = prevMonthEntries.reduce((acc, curr) => acc + curr.purchases, 0);
+      const prevVendas = prevMonthEntries.reduce((acc, curr) => acc + curr.sales, 0);
+      const prevTotal = prevVendas - prevCompras;
+
+      // Detalhamento individual de cada empresa para este mês
+      const companyBreakdown = companies.map(c => {
+        const ent = monthEntries.find(e => e.companyId === c.id);
+        return {
+          companyId: c.id,
+          name: c.name,
+          color: c.color,
+          purchases: ent?.purchases || 0,
+          sales: ent?.sales || 0,
+          margin: (ent?.sales || 0) - (ent?.purchases || 0)
+        };
+      });
 
       return {
         monthIndex: index,
@@ -937,13 +1206,63 @@ function ModernDashboardView({
         margem,
         margemPct,
         proporcao,
-        notas: entry?.notesCount || 0,
-        produtos: entry?.productsCount || 0,
-        status: entry?.status || 'AGUARDANDO',
-        prevTotal
+        notas,
+        produtos,
+        status,
+        prevTotal,
+        companyBreakdown
       };
     });
-  }, [filteredEntries, prevYearEntries]);
+  }, [filteredEntries, prevYearEntries, companies]);
+
+  // Efeito elástico para fazer o gráfico se mover e vibrar
+  const triggerWaveEffect = () => {
+    setIsShaking(true);
+    setAnimTrigger(prev => prev + 1);
+    setTimeout(() => {
+      setIsShaking(false);
+    }, 850);
+  };
+
+  // Re-executar animações das barras
+  const triggerReanimate = () => {
+    setAnimTrigger(prev => prev + 1);
+  };
+
+  // Cálculo da maior venda para configurar o slider de simulação de meta
+  const maxSales = useMemo(() => {
+    return Math.max(...monthlyData.map(m => m.vendas), 10000);
+  }, [monthlyData]);
+
+  // Inicializa meta em 75% da maior venda
+  useEffect(() => {
+    if (targetGoal === 0 && maxSales > 10000) {
+      setTargetGoal(Math.round((maxSales * 0.75) / 1000) * 1000);
+    }
+  }, [maxSales]);
+
+  // Dados filtrados de acordo com o período selecionado para o gráfico
+  const chartDisplayData = useMemo(() => {
+    if (chartPeriod === 'sem1') return monthlyData.slice(0, 6);
+    if (chartPeriod === 'sem2') return monthlyData.slice(6, 12);
+    if (chartPeriod === 'q1') return monthlyData.slice(0, 3);
+    if (chartPeriod === 'q2') return monthlyData.slice(3, 6);
+    if (chartPeriod === 'q3') return monthlyData.slice(6, 9);
+    if (chartPeriod === 'q4') return monthlyData.slice(9, 12);
+    return monthlyData;
+  }, [monthlyData, chartPeriod]);
+
+  // Contagem de meses que atingiram a meta projetada
+  const monthsAchievedTarget = useMemo(() => {
+    if (!targetGoal || targetGoal <= 0) return 0;
+    return chartDisplayData.filter(m => m.vendas >= targetGoal).length;
+  }, [chartDisplayData, targetGoal]);
+
+  // Dados do mês focado para o card animado de Raio-X
+  const focusedMonthData = useMemo(() => {
+    if (focusedMonthIndex === null) return null;
+    return monthlyData.find(m => m.monthIndex === focusedMonthIndex) || null;
+  }, [monthlyData, focusedMonthIndex]);
 
   // Métricas Consolidadas do Período Selecionado
   const activeMetrics = useMemo(() => {
@@ -1009,6 +1328,43 @@ function ModernDashboardView({
       className="space-y-6"
     >
       
+      {/* BANNER DE CONSOLIDAÇÃO ATIVA QUANDO AMBAS AS EMPRESAS ESTÃO SELECIONADAS */}
+      {isConsolidated && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-50 via-indigo-50/50 to-purple-50 dark:from-purple-950/40 dark:via-indigo-950/20 dark:to-purple-950/40 border border-purple-200 dark:border-purple-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold shrink-0 shadow-md shadow-purple-600/30">
+              <Layers size={18} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-xs text-purple-900 dark:text-purple-200">
+                  Consolidação Geral de Ambas as Empresas
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-300">
+                  {companies.map(c => c.name).join(' + ')}
+                </span>
+              </div>
+              <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                Visualizando resultados somados de faturamento, custos e lucratividade do grupo corporativo.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {companies.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedCompanyId(c.id)}
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800/80 text-purple-800 dark:text-purple-200 text-xs font-bold hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-all cursor-pointer shadow-2xs"
+              >
+                Ver {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 4 CARDS DE INDICADORES EXECUTIVOS (KPIs) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
@@ -1131,64 +1487,289 @@ function ModernDashboardView({
 
       </div>
 
-      {/* ÁREA CENTRAL DE GRÁFICOS */}
-      <div className="rounded-2xl bg-white dark:bg-[#0d1322] border border-slate-200/90 dark:border-slate-800/80 shadow-sm p-6 space-y-6">
+      {/* ÁREA CENTRAL DE GRÁFICOS INTERATIVOS */}
+      <div className="rounded-2xl bg-white dark:bg-[#0d1322] border border-slate-200/90 dark:border-slate-800/80 shadow-sm p-6 space-y-5">
         
-        {/* Cabeçalho do Gráfico com Alternador de Visualização */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Cabeçalho do Gráfico com Título e Botões de Animação/Movimento */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
-              Performance Financeira ({selectedYear})
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Comparativo de receitas, compras e lucratividade ao longo dos 12 meses
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                Performance Financeira Interativa ({selectedYear})
+              </h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center gap-1">
+                <Sparkles size={11} /> Gráfico Dinâmico
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Clique nas barras, alterne modos, arraste o cursor ou use os botões para fazer o gráfico se mover e reagir!
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Botões de Ação Dinâmica: Mexer Gráfico, Reanimar, Arrastar, Meta */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Botão Mexer / Balançar Gráfico com Efeito Onda */}
+            <button
+              type="button"
+              onClick={triggerWaveEffect}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer",
+                isShaking 
+                  ? "bg-amber-500 text-white scale-105 shadow-amber-500/30" 
+                  : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:hover:bg-indigo-900/80 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/60"
+              )}
+              title="Faz o gráfico se mover e vibrar com efeito de onda física elástica!"
+            >
+              <Zap size={14} className={isShaking ? "animate-bounce text-white" : "text-amber-500 fill-amber-500"} />
+              <span>{isShaking ? "Mexendo..." : "🌊 Mexer Gráfico"}</span>
+            </button>
+
+            {/* Botão Reanimar Barras */}
+            <button
+              type="button"
+              onClick={triggerReanimate}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+              title="Dispara a animação de subida das barras novamente"
+            >
+              <RotateCcw size={13} />
+              <span>⚡ Reanimar</span>
+            </button>
+
+            {/* Alternar Barra Deslizante de Arrastar (Brush) */}
+            <button
+              type="button"
+              onClick={() => setShowBrush(!showBrush)}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer",
+                showBrush 
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" 
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+              )}
+              title="Ativa a barra deslizante no rodapé para arrastar e dar zoom nos meses com o mouse"
+            >
+              <MoveHorizontal size={13} />
+              <span>{showBrush ? "Ocultar Arraste" : "↔️ Arrastar Meses"}</span>
+            </button>
+
+            {/* Alternar Simulador de Meta */}
+            <button
+              type="button"
+              onClick={() => setShowTargetSimulator(!showTargetSimulator)}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer",
+                showTargetSimulator 
+                  ? "bg-amber-600 text-white border-amber-600 shadow-sm" 
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+              )}
+              title="Abre o controle deslizante para mover uma linha de meta pelo gráfico"
+            >
+              <Target size={13} />
+              <span>{showTargetSimulator ? "Fechar Meta" : "🎯 Mover Meta"}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Barra Secundária: Modos de Gráfico + Filtro de Período */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+          
+          {/* Seletor de Modo de Gráfico */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">Modo:</span>
             <div className="flex bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700/60 text-xs font-semibold">
               <button
+                type="button"
+                onClick={() => setChartMode('composed')}
+                className={cn(
+                  "px-2.5 py-1 rounded-md transition-all cursor-pointer",
+                  chartMode === 'composed' 
+                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm font-bold" 
+                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                )}
+              >
+                Misto (Barras + Linha)
+              </button>
+              <button
+                type="button"
                 onClick={() => setChartMode('bars')}
                 className={cn(
-                  "px-3 py-1.5 rounded-md transition-all",
+                  "px-2.5 py-1 rounded-md transition-all cursor-pointer",
                   chartMode === 'bars' 
                     ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm font-bold" 
                     : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                 )}
               >
-                Barras (Compras x Vendas)
+                Barras Comparativas
               </button>
               <button
+                type="button"
+                onClick={() => setChartMode('stacked')}
+                className={cn(
+                  "px-2.5 py-1 rounded-md transition-all cursor-pointer",
+                  chartMode === 'stacked' 
+                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm font-bold" 
+                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                )}
+              >
+                Empilhado
+              </button>
+              <button
+                type="button"
                 onClick={() => setChartMode('area')}
                 className={cn(
-                  "px-3 py-1.5 rounded-md transition-all",
+                  "px-2.5 py-1 rounded-md transition-all cursor-pointer",
                   chartMode === 'area' 
                     ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm font-bold" 
                     : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                 )}
               >
-                Tendência Temporal
+                Área Fluida
               </button>
               <button
+                type="button"
                 onClick={() => setChartMode('margin')}
                 className={cn(
-                  "px-3 py-1.5 rounded-md transition-all",
+                  "px-2.5 py-1 rounded-md transition-all cursor-pointer",
                   chartMode === 'margin' 
                     ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm font-bold" 
                     : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                 )}
               >
-                Resultado & Margem
+                Rentabilidade
               </button>
             </div>
           </div>
+
+          {/* Filtro de Período (12M, 1º Semestre, 2º Semestre, Trimestres) */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/60 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-700/60 text-[11px] font-semibold">
+            {[
+              { id: 'all', label: '12 Meses' },
+              { id: 'sem1', label: '1º Sem' },
+              { id: 'sem2', label: '2º Sem' },
+              { id: 'q1', label: 'Q1' },
+              { id: 'q2', label: 'Q2' },
+              { id: 'q3', label: 'Q3' },
+              { id: 'q4', label: 'Q4' }
+            ].map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  setChartPeriod(p.id as ChartPeriod);
+                  setAnimTrigger(prev => prev + 1);
+                }}
+                className={cn(
+                  "px-2 py-1 rounded transition-all cursor-pointer",
+                  chartPeriod === p.id 
+                    ? "bg-indigo-600 text-white shadow-xs font-bold" 
+                    : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
         </div>
 
-        {/* Viewport do Gráfico */}
-        <div className="h-[320px] w-full">
+        {/* Painel do Simulador de Meta Interativa (se ativado) */}
+        <AnimatePresence>
+          {showTargetSimulator && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2 overflow-hidden"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <Target className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    Mover Linha de Meta no Gráfico:
+                  </span>
+                  <span className="font-mono font-black text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/80 px-2 py-0.5 rounded">
+                    {formatBRL(targetGoal)}
+                  </span>
+                </div>
+                <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                  Desempenho: <strong className="text-amber-600 dark:text-amber-400 font-bold">{monthsAchievedTarget} de {chartDisplayData.length} meses</strong> superaram esta meta!
+                </div>
+              </div>
+
+              {/* Slider de Alcance da Meta */}
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-mono text-slate-500">R$ 0</span>
+                <input
+                  type="range"
+                  min="0"
+                  max={Math.max(maxSales * 1.25, 50000)}
+                  step="5000"
+                  value={targetGoal}
+                  onChange={(e) => setTargetGoal(Number(e.target.value))}
+                  className="w-full accent-amber-500 cursor-pointer h-2 bg-slate-200 dark:bg-slate-700 rounded-lg"
+                />
+                <span className="text-[10px] font-mono text-slate-500">
+                  {formatCompactBRL(Math.max(maxSales * 1.25, 50000))}
+                </span>
+              </div>
+
+              {/* Presets Rápidos de Meta */}
+              <div className="flex items-center gap-2 pt-1 text-[10px] flex-wrap">
+                <span className="text-slate-500 font-semibold">Atalhos de Meta:</span>
+                <button
+                  type="button"
+                  onClick={() => setTargetGoal(Math.round((maxSales * 0.5) / 1000) * 1000)}
+                  className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-amber-500 cursor-pointer"
+                >
+                  50% da Máxima ({formatCompactBRL(maxSales * 0.5)})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTargetGoal(Math.round((maxSales * 0.75) / 1000) * 1000)}
+                  className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-amber-500 cursor-pointer"
+                >
+                  75% da Máxima ({formatCompactBRL(maxSales * 0.75)})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTargetGoal(Math.round(maxSales / 1000) * 1000)}
+                  className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-amber-500 font-bold cursor-pointer"
+                >
+                  Meta 100% Pico ({formatCompactBRL(maxSales)})
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Viewport do Gráfico com Animação Elástica Motion */}
+        <motion.div 
+          key={animTrigger}
+          animate={isShaking ? {
+            rotate: [0, -1.2, 1.2, -0.8, 0.8, -0.4, 0.4, 0],
+            scale: [1, 1.022, 0.985, 1.012, 0.995, 1],
+            y: [0, -8, 6, -4, 3, 0],
+            x: [0, -4, 4, -3, 3, 0]
+          } : {
+            rotate: 0,
+            scale: 1,
+            y: 0,
+            x: 0
+          }}
+          transition={{ duration: 0.85, ease: "easeInOut" }}
+          className="h-[340px] w-full relative transition-all"
+        >
           <ResponsiveContainer width="100%" height="100%">
-            {chartMode === 'bars' ? (
-              <BarChart3_Recharts data={monthlyData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+            {chartMode === 'composed' ? (
+              <ComposedChart 
+                data={chartDisplayData} 
+                margin={{ top: 15, right: 15, left: -10, bottom: showBrush ? 12 : 0 }}
+                onClick={(e: any) => {
+                  if (e && e.activeTooltipIndex !== undefined && chartDisplayData[e.activeTooltipIndex]) {
+                    setFocusedMonthIndex(chartDisplayData[e.activeTooltipIndex].monthIndex);
+                  }
+                }}
+              >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
                 <XAxis 
                   dataKey="name" 
@@ -1202,62 +1783,583 @@ function ModernDashboardView({
                   tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} 
                   tickFormatter={(val) => formatCompactBRL(val)}
                 />
-                <Tooltip content={<CustomChartTooltip />} />
-                <Bar_Recharts dataKey="compras" name="Compras" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                <Bar_Recharts dataKey="vendas" name="Vendas" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                <Tooltip content={<CustomChartTooltip targetGoal={showTargetSimulator ? targetGoal : undefined} />} />
+                {showTargetSimulator && targetGoal > 0 && (
+                  <ReferenceLine 
+                    y={targetGoal} 
+                    stroke="#f59e0b" 
+                    strokeDasharray="4 4" 
+                    strokeWidth={2}
+                    label={{ value: `Meta: ${formatCompactBRL(targetGoal)}`, fill: '#f59e0b', fontSize: 11, position: 'insideTopRight' }}
+                  />
+                )}
+                {visibleSeries.compras && (
+                  <Bar_Recharts 
+                    dataKey="compras" 
+                    name="Compras" 
+                    fill="#6366f1" 
+                    radius={[4, 4, 0, 0]} 
+                    maxBarSize={32}
+                    animationDuration={850}
+                    className="cursor-pointer"
+                  >
+                    {chartDisplayData.map((entry) => (
+                      <Cell 
+                        key={`cell-c-${entry.monthIndex}`} 
+                        fill={focusedMonthIndex === null || focusedMonthIndex === entry.monthIndex ? '#6366f1' : '#6366f140'} 
+                      />
+                    ))}
+                  </Bar_Recharts>
+                )}
+                {visibleSeries.vendas && (
+                  <Bar_Recharts 
+                    dataKey="vendas" 
+                    name="Vendas" 
+                    fill="#10b981" 
+                    radius={[4, 4, 0, 0]} 
+                    maxBarSize={32}
+                    animationDuration={950}
+                    className="cursor-pointer"
+                  >
+                    {chartDisplayData.map((entry) => (
+                      <Cell 
+                        key={`cell-v-${entry.monthIndex}`} 
+                        fill={focusedMonthIndex === null || focusedMonthIndex === entry.monthIndex ? '#10b981' : '#10b98140'} 
+                      />
+                    ))}
+                  </Bar_Recharts>
+                )}
+                {visibleSeries.margem && (
+                  <Line 
+                    type="monotone" 
+                    dataKey="margem" 
+                    name="Resultado Líquido" 
+                    stroke="#3b82f6" 
+                    strokeWidth={3} 
+                    dot={{ r: 4, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} 
+                    activeDot={{ r: 7 }} 
+                    animationDuration={1100}
+                  />
+                )}
+                {showBrush && (
+                  <Brush 
+                    dataKey="name" 
+                    height={26} 
+                    stroke="#6366f1" 
+                    fill="rgba(99, 102, 241, 0.08)"
+                    startIndex={0} 
+                    endIndex={chartDisplayData.length - 1}
+                  />
+                )}
+              </ComposedChart>
+            ) : chartMode === 'bars' ? (
+              <BarChart3_Recharts 
+                data={chartDisplayData} 
+                margin={{ top: 15, right: 15, left: -10, bottom: showBrush ? 12 : 0 }}
+                onClick={(e: any) => {
+                  if (e && e.activeTooltipIndex !== undefined && chartDisplayData[e.activeTooltipIndex]) {
+                    setFocusedMonthIndex(chartDisplayData[e.activeTooltipIndex].monthIndex);
+                  }
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} 
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} 
+                  tickFormatter={(val) => formatCompactBRL(val)}
+                />
+                <Tooltip content={<CustomChartTooltip targetGoal={showTargetSimulator ? targetGoal : undefined} />} />
+                {showTargetSimulator && targetGoal > 0 && (
+                  <ReferenceLine 
+                    y={targetGoal} 
+                    stroke="#f59e0b" 
+                    strokeDasharray="4 4" 
+                    strokeWidth={2}
+                    label={{ value: `Meta: ${formatCompactBRL(targetGoal)}`, fill: '#f59e0b', fontSize: 11, position: 'insideTopRight' }}
+                  />
+                )}
+                {visibleSeries.compras && (
+                  <Bar_Recharts 
+                    dataKey="compras" 
+                    name="Compras" 
+                    fill="#6366f1" 
+                    radius={[4, 4, 0, 0]} 
+                    maxBarSize={32}
+                    animationDuration={850}
+                    className="cursor-pointer"
+                  >
+                    {chartDisplayData.map((entry) => (
+                      <Cell 
+                        key={`cell-c-${entry.monthIndex}`} 
+                        fill={focusedMonthIndex === null || focusedMonthIndex === entry.monthIndex ? '#6366f1' : '#6366f140'} 
+                      />
+                    ))}
+                  </Bar_Recharts>
+                )}
+                {visibleSeries.vendas && (
+                  <Bar_Recharts 
+                    dataKey="vendas" 
+                    name="Vendas" 
+                    fill="#10b981" 
+                    radius={[4, 4, 0, 0]} 
+                    maxBarSize={32}
+                    animationDuration={950}
+                    className="cursor-pointer"
+                  >
+                    {chartDisplayData.map((entry) => (
+                      <Cell 
+                        key={`cell-v-${entry.monthIndex}`} 
+                        fill={focusedMonthIndex === null || focusedMonthIndex === entry.monthIndex ? '#10b981' : '#10b98140'} 
+                      />
+                    ))}
+                  </Bar_Recharts>
+                )}
+                {showBrush && (
+                  <Brush 
+                    dataKey="name" 
+                    height={26} 
+                    stroke="#6366f1" 
+                    fill="rgba(99, 102, 241, 0.08)"
+                    startIndex={0} 
+                    endIndex={chartDisplayData.length - 1}
+                  />
+                )}
+              </BarChart3_Recharts>
+            ) : chartMode === 'stacked' ? (
+              <BarChart3_Recharts 
+                data={chartDisplayData} 
+                margin={{ top: 15, right: 15, left: -10, bottom: showBrush ? 12 : 0 }}
+                onClick={(e: any) => {
+                  if (e && e.activeTooltipIndex !== undefined && chartDisplayData[e.activeTooltipIndex]) {
+                    setFocusedMonthIndex(chartDisplayData[e.activeTooltipIndex].monthIndex);
+                  }
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} 
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} 
+                  tickFormatter={(val) => formatCompactBRL(val)}
+                />
+                <Tooltip content={<CustomChartTooltip targetGoal={showTargetSimulator ? targetGoal : undefined} />} />
+                {showTargetSimulator && targetGoal > 0 && (
+                  <ReferenceLine 
+                    y={targetGoal} 
+                    stroke="#f59e0b" 
+                    strokeDasharray="4 4" 
+                    strokeWidth={2}
+                    label={{ value: `Meta: ${formatCompactBRL(targetGoal)}`, fill: '#f59e0b', fontSize: 11, position: 'insideTopRight' }}
+                  />
+                )}
+                {visibleSeries.compras && (
+                  <Bar_Recharts 
+                    dataKey="compras" 
+                    name="Compras" 
+                    stackId="a" 
+                    fill="#6366f1" 
+                    radius={[0, 0, 0, 0]} 
+                    maxBarSize={36} 
+                    animationDuration={850}
+                    className="cursor-pointer"
+                  />
+                )}
+                {visibleSeries.vendas && (
+                  <Bar_Recharts 
+                    dataKey="vendas" 
+                    name="Vendas" 
+                    stackId="a" 
+                    fill="#10b981" 
+                    radius={[4, 4, 0, 0]} 
+                    maxBarSize={36} 
+                    animationDuration={950}
+                    className="cursor-pointer"
+                  />
+                )}
+                {showBrush && (
+                  <Brush 
+                    dataKey="name" 
+                    height={26} 
+                    stroke="#6366f1" 
+                    fill="rgba(99, 102, 241, 0.08)"
+                    startIndex={0} 
+                    endIndex={chartDisplayData.length - 1}
+                  />
+                )}
               </BarChart3_Recharts>
             ) : chartMode === 'area' ? (
-              <AreaChart data={monthlyData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <AreaChart 
+                data={chartDisplayData} 
+                margin={{ top: 15, right: 15, left: -10, bottom: showBrush ? 12 : 0 }}
+                onClick={(e: any) => {
+                  if (e && e.activeTooltipIndex !== undefined && chartDisplayData[e.activeTooltipIndex]) {
+                    setFocusedMonthIndex(chartDisplayData[e.activeTooltipIndex].monthIndex);
+                  }
+                }}
+              >
                 <defs>
                   <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.35}/>
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.38}/>
                     <stop offset="95%" stopColor="#10b981" stopOpacity={0.0}/>
                   </linearGradient>
                   <linearGradient id="colorCompras" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35}/>
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.38}/>
                     <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} tickFormatter={(val) => formatCompactBRL(val)} />
-                <Tooltip content={<CustomChartTooltip />} />
-                <Area type="monotone" dataKey="vendas" name="Vendas" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorVendas)" />
-                <Area type="monotone" dataKey="compras" name="Compras" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorCompras)" />
+                <Tooltip content={<CustomChartTooltip targetGoal={showTargetSimulator ? targetGoal : undefined} />} />
+                {showTargetSimulator && targetGoal > 0 && (
+                  <ReferenceLine 
+                    y={targetGoal} 
+                    stroke="#f59e0b" 
+                    strokeDasharray="4 4" 
+                    strokeWidth={2}
+                    label={{ value: `Meta: ${formatCompactBRL(targetGoal)}`, fill: '#f59e0b', fontSize: 11, position: 'insideTopRight' }}
+                  />
+                )}
+                {visibleSeries.vendas && (
+                  <Area 
+                    type="monotone" 
+                    dataKey="vendas" 
+                    name="Vendas" 
+                    stroke="#10b981" 
+                    strokeWidth={2.5} 
+                    fillOpacity={1} 
+                    fill="url(#colorVendas)" 
+                    animationDuration={1000}
+                  />
+                )}
+                {visibleSeries.compras && (
+                  <Area 
+                    type="monotone" 
+                    dataKey="compras" 
+                    name="Compras" 
+                    stroke="#6366f1" 
+                    strokeWidth={2.5} 
+                    fillOpacity={1} 
+                    fill="url(#colorCompras)" 
+                    animationDuration={1000}
+                  />
+                )}
+                {showBrush && (
+                  <Brush 
+                    dataKey="name" 
+                    height={26} 
+                    stroke="#6366f1" 
+                    fill="rgba(99, 102, 241, 0.08)"
+                    startIndex={0} 
+                    endIndex={chartDisplayData.length - 1}
+                  />
+                )}
               </AreaChart>
             ) : (
-              <LineChart data={monthlyData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <LineChart 
+                data={chartDisplayData} 
+                margin={{ top: 15, right: 15, left: -10, bottom: showBrush ? 12 : 0 }}
+                onClick={(e: any) => {
+                  if (e && e.activeTooltipIndex !== undefined && chartDisplayData[e.activeTooltipIndex]) {
+                    setFocusedMonthIndex(chartDisplayData[e.activeTooltipIndex].monthIndex);
+                  }
+                }}
+              >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} tickFormatter={(val) => formatCompactBRL(val)} />
-                <Tooltip content={<CustomChartTooltip />} />
-                <Line type="monotone" dataKey="margem" name="Resultado Líquido" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                <Tooltip content={<CustomChartTooltip targetGoal={showTargetSimulator ? targetGoal : undefined} />} />
+                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="2 2" />
+                {showTargetSimulator && targetGoal > 0 && (
+                  <ReferenceLine 
+                    y={targetGoal} 
+                    stroke="#f59e0b" 
+                    strokeDasharray="4 4" 
+                    strokeWidth={2}
+                    label={{ value: `Meta: ${formatCompactBRL(targetGoal)}`, fill: '#f59e0b', fontSize: 11, position: 'insideTopRight' }}
+                  />
+                )}
+                <Line 
+                  type="monotone" 
+                  dataKey="margem" 
+                  name="Resultado Líquido" 
+                  stroke="#3b82f6" 
+                  strokeWidth={3} 
+                  dot={{ r: 4, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} 
+                  activeDot={{ r: 7 }} 
+                  animationDuration={950}
+                />
+                {showBrush && (
+                  <Brush 
+                    dataKey="name" 
+                    height={26} 
+                    stroke="#6366f1" 
+                    fill="rgba(99, 102, 241, 0.08)"
+                    startIndex={0} 
+                    endIndex={chartDisplayData.length - 1}
+                  />
+                )}
               </LineChart>
             )}
           </ResponsiveContainer>
-        </div>
+        </motion.div>
 
-        {/* Legenda Informativa */}
-        <div className="flex flex-wrap items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/60 text-xs">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm bg-emerald-500" />
-              <span className="font-semibold text-slate-700 dark:text-slate-300">Vendas (Receitas)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm bg-indigo-500" />
-              <span className="font-semibold text-slate-700 dark:text-slate-300">Compras (Custos)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm bg-blue-500" />
-              <span className="font-semibold text-slate-700 dark:text-slate-300">Margem Operacional</span>
-            </div>
+        {/* Barra de Séries Clicáveis (Ligar/Desligar com 1 toque) */}
+        <div className="flex flex-wrap items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/60 text-xs gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold text-slate-500">Séries:</span>
+            
+            {/* Toggle Vendas */}
+            <button
+              type="button"
+              onClick={() => setVisibleSeries(prev => ({ ...prev, vendas: !prev.vendas }))}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer",
+                visibleSeries.vendas
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300/60 dark:border-emerald-800/60 shadow-xs"
+                  : "bg-slate-50 text-slate-400 dark:bg-slate-800/40 dark:text-slate-500 border-slate-200 dark:border-slate-700 line-through opacity-70"
+              )}
+            >
+              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
+              <span>Vendas (Receitas)</span>
+              {visibleSeries.vendas ? <Check size={12} /> : <EyeOff size={12} />}
+            </button>
+
+            {/* Toggle Compras */}
+            <button
+              type="button"
+              onClick={() => setVisibleSeries(prev => ({ ...prev, compras: !prev.compras }))}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer",
+                visibleSeries.compras
+                  ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300/60 dark:border-indigo-800/60 shadow-xs"
+                  : "bg-slate-50 text-slate-400 dark:bg-slate-800/40 dark:text-slate-500 border-slate-200 dark:border-slate-700 line-through opacity-70"
+              )}
+            >
+              <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500" />
+              <span>Compras (Custos)</span>
+              {visibleSeries.compras ? <Check size={12} /> : <EyeOff size={12} />}
+            </button>
+
+            {/* Toggle Margem */}
+            <button
+              type="button"
+              onClick={() => setVisibleSeries(prev => ({ ...prev, margem: !prev.margem }))}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer",
+                visibleSeries.margem
+                  ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300/60 dark:border-blue-800/60 shadow-xs"
+                  : "bg-slate-50 text-slate-400 dark:bg-slate-800/40 dark:text-slate-500 border-slate-200 dark:border-slate-700 line-through opacity-70"
+              )}
+            >
+              <span className="w-2.5 h-2.5 rounded-sm bg-blue-500" />
+              <span>Margem Operacional</span>
+              {visibleSeries.margem ? <Check size={12} /> : <EyeOff size={12} />}
+            </button>
           </div>
 
           <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px]">
-            Destaque: <strong className="text-slate-900 dark:text-white">{activeMetrics.bestMonth?.fullName}</strong> foi o mês de maior receita ({formatCompactBRL(activeMetrics.bestMonth?.vendas || 0)})
+            Destaque: <strong className="text-slate-900 dark:text-white">{activeMetrics.bestMonth?.fullName}</strong> ({formatCompactBRL(activeMetrics.bestMonth?.vendas || 0)})
           </div>
         </div>
+
+        {/* RÉGUA INTERATIVA DE MESES (Clique para navegar e focar o gráfico) */}
+        <div className="pt-2 space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+            <span className="flex items-center gap-1">
+              <MousePointerClick size={13} className="text-indigo-500" />
+              Régua de Meses Interativa (Clique para destacar a barra):
+            </span>
+            {focusedMonthIndex !== null && (
+              <button
+                type="button"
+                onClick={() => setFocusedMonthIndex(null)}
+                className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-bold cursor-pointer"
+              >
+                ✕ Limpar foco ({MONTHS[focusedMonthIndex]})
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5">
+            {chartDisplayData.map((m) => {
+              const isFocused = focusedMonthIndex === m.monthIndex;
+              return (
+                <button
+                  key={m.monthIndex}
+                  type="button"
+                  onClick={() => {
+                    setFocusedMonthIndex(isFocused ? null : m.monthIndex);
+                    if (!isFocused) {
+                      setIsShaking(true);
+                      setTimeout(() => setIsShaking(false), 350);
+                    }
+                  }}
+                  className={cn(
+                    "flex flex-col items-center py-2 px-1 rounded-xl transition-all border text-center cursor-pointer group",
+                    isFocused
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30 scale-105 font-bold"
+                      : "bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-700 dark:text-slate-300"
+                  )}
+                >
+                  <span className="text-[11px] font-bold">{m.name}</span>
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      m.status === 'CONCLUIDO' 
+                        ? (isFocused ? "bg-white" : "bg-emerald-500") 
+                        : m.status === 'EM ANDAMENTO' 
+                          ? (isFocused ? "bg-amber-200" : "bg-amber-500") 
+                          : (isFocused ? "bg-slate-300" : "bg-slate-400")
+                    )} />
+                  </div>
+                  <span className={cn(
+                    "text-[9px] font-mono mt-0.5",
+                    isFocused ? "text-indigo-100" : "text-slate-400 dark:text-slate-500"
+                  )}>
+                    {formatCompactBRL(m.vendas)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* CARD EXPANSÍVEL: RAIO-X INTERATIVO DO MÊS SELECIONADO */}
+        <AnimatePresence>
+          {focusedMonthData && (
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.98 }}
+              className="p-4 rounded-xl bg-gradient-to-r from-indigo-50/80 via-slate-50 to-emerald-50/80 dark:from-indigo-950/30 dark:via-slate-900/40 dark:to-emerald-950/30 border border-indigo-200 dark:border-indigo-800/70 shadow-sm space-y-3"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100 dark:border-indigo-900/60 pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">
+                    {focusedMonthData.name}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      Raio-X Operacional: {focusedMonthData.fullName} de {selectedYear}
+                      <span className={cn(
+                        "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider",
+                        focusedMonthData.status === 'CONCLUIDO' 
+                          ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400" 
+                          : focusedMonthData.status === 'EM ANDAMENTO' 
+                            ? "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400" 
+                            : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                      )}>
+                        {focusedMonthData.status === 'CONCLUIDO' ? 'Concluído' : focusedMonthData.status === 'EM ANDAMENTO' ? 'Em Andamento' : 'Aguardando'}
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Detalhamento do fechamento e rentabilidade deste período
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const prevIndex = focusedMonthData.monthIndex > 0 ? focusedMonthData.monthIndex - 1 : 11;
+                      setFocusedMonthIndex(prevIndex);
+                    }}
+                    className="p-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <ChevronLeft size={14} /> Mês Anterior
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextIndex = focusedMonthData.monthIndex < 11 ? focusedMonthData.monthIndex + 1 : 0;
+                      setFocusedMonthIndex(nextIndex);
+                    }}
+                    className="p-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    Próximo Mês <ChevronRight size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFocusedMonthIndex(null)}
+                    className="p-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-rose-50 hover:text-rose-600 text-slate-500 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                    title="Fechar foco"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* 4 Mini Cards do Mês */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60">
+                  <span className="text-[10px] text-slate-500 font-semibold block">Vendas (Faturamento)</span>
+                  <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                    {formatBRL(focusedMonthData.vendas)}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60">
+                  <span className="text-[10px] text-slate-500 font-semibold block">Compras (Custos)</span>
+                  <span className="text-sm font-bold font-mono text-indigo-600 dark:text-indigo-400">
+                    {formatBRL(focusedMonthData.compras)}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60">
+                  <span className="text-[10px] text-slate-500 font-semibold block">Margem Líquida</span>
+                  <span className={cn(
+                    "text-sm font-bold font-mono",
+                    focusedMonthData.margem >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+                  )}>
+                    {formatBRL(focusedMonthData.margem)} ({focusedMonthData.margemPct.toFixed(1)}%)
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60">
+                  <span className="text-[10px] text-slate-500 font-semibold block">Volume Físico</span>
+                  <span className="text-xs font-bold font-mono text-slate-800 dark:text-slate-200">
+                    {focusedMonthData.notas} notas / {focusedMonthData.produtos} itens
+                  </span>
+                </div>
+              </div>
+
+              {/* Detalhamento por Empresa no Raio-X quando Consolidado */}
+              {isConsolidated && focusedMonthData.companyBreakdown && focusedMonthData.companyBreakdown.length > 1 && (
+                <div className="pt-2.5 border-t border-indigo-100 dark:border-indigo-900/40">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300 block mb-2">
+                    Composição deste Mês por Empresa:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {focusedMonthData.companyBreakdown.map((cb: any, i: number) => (
+                      <div key={i} className="p-2.5 rounded-lg bg-white/90 dark:bg-slate-800/90 border border-purple-200/70 dark:border-purple-800/50 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cb.color || '#8b5cf6' }} />
+                          <span className="font-bold text-slate-800 dark:text-white">{cb.name}</span>
+                        </div>
+                        <div className="text-right font-mono text-[11px]">
+                          <div>Vendas: <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatCompactBRL(cb.sales)}</span></div>
+                          <div>Compras: <span className="font-bold text-indigo-600 dark:text-indigo-400">{formatCompactBRL(cb.purchases)}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       </div>
 
@@ -1350,13 +2452,24 @@ function ModernDashboardView({
 }
 
 // Custom Tooltip para Gráficos
-function CustomChartTooltip({ active, payload, label }: any) {
+function CustomChartTooltip({ active, payload, label, targetGoal }: any) {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
+    const isTargetMet = targetGoal && targetGoal > 0 ? data.vendas >= targetGoal : null;
     return (
-      <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl text-xs space-y-2 min-w-[190px]">
-        <div className="font-bold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800 pb-1.5">
-          {data.fullName}
+      <div className="p-3.5 bg-white/95 dark:bg-[#0d1322]/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl text-xs space-y-2.5 min-w-[210px] pointer-events-none">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+          <span className="font-bold text-slate-900 dark:text-white">{data.fullName}</span>
+          <span className={cn(
+            "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider",
+            data.status === 'CONCLUIDO' 
+              ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400" 
+              : data.status === 'EM ANDAMENTO' 
+                ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400" 
+                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+          )}>
+            {data.status === 'CONCLUIDO' ? 'Concluído' : data.status === 'EM ANDAMENTO' ? 'Andamento' : 'Aguardando'}
+          </span>
         </div>
         <div className="space-y-1 font-mono">
           <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
@@ -1369,12 +2482,45 @@ function CustomChartTooltip({ active, payload, label }: any) {
           </div>
           <div className="flex items-center justify-between text-slate-700 dark:text-slate-300 pt-1 border-t border-slate-100 dark:border-slate-800">
             <span>Resultado:</span>
-            <span className="font-bold">{formatBRL(data.margem)}</span>
+            <span className={cn("font-bold", data.margem >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+              {formatBRL(data.margem)}
+            </span>
           </div>
         </div>
+        {data.companyBreakdown && data.companyBreakdown.length > 1 && (
+          <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
+            <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 block uppercase tracking-wider">
+              Detalhamento por Empresa
+            </span>
+            {data.companyBreakdown.map((cb: any, i: number) => (
+              <div key={i} className="flex items-center justify-between text-[11px] bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cb.color }} />
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{cb.name}:</span>
+                </div>
+                <div className="font-mono text-right">
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatCompactBRL(cb.sales)}</span>
+                  <span className="text-slate-400 mx-1">/</span>
+                  <span className="text-slate-600 dark:text-slate-300">{formatCompactBRL(cb.purchases)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {targetGoal && targetGoal > 0 && (
+          <div className="pt-1 border-t border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px]">
+            <span className="text-amber-600 dark:text-amber-400 font-medium">Meta ({formatCompactBRL(targetGoal)}):</span>
+            <span className={cn("font-bold font-mono", isTargetMet ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500")}>
+              {isTargetMet ? "✓ Superou" : "✕ Abaixo"}
+            </span>
+          </div>
+        )}
         <div className="text-[10px] text-slate-400 pt-1 flex justify-between">
           <span>Eficiência C/V:</span>
           <span className="font-bold text-slate-600 dark:text-slate-300">{data.proporcao.toFixed(1)}%</span>
+        </div>
+        <div className="text-[9px] text-indigo-500 dark:text-indigo-400 font-medium text-center pt-0.5">
+          👆 Clique na barra para fixar o mês
         </div>
       </div>
     );
@@ -1405,8 +2551,13 @@ function ModernEntriesView({
 }) {
   const [filterTerm, setFilterTerm] = useState('');
 
+  const isConsolidated = selectedCompanyId === 'all';
+
   const companyEntries = useMemo(() => {
     if (!selectedCompanyId) return [];
+    if (selectedCompanyId === 'all') {
+      return entries.filter(e => e.year === selectedYear);
+    }
     return entries.filter(e => e.companyId === selectedCompanyId && e.year === selectedYear);
   }, [entries, selectedCompanyId, selectedYear]);
 
@@ -1421,20 +2572,62 @@ function ModernEntriesView({
       {/* Barra de Filtro e Seleção */}
       <div className="p-4 rounded-2xl bg-white dark:bg-[#0d1322] border border-slate-200/90 dark:border-slate-800/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-white">
-            Lançamentos Financeiros ({selectedYear})
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              Lançamentos Financeiros ({selectedYear})
+            </h3>
+            {isConsolidated && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                Consolidação Geral
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Informe ou edite os valores de Compras e Vendas para cada competência
+            {isConsolidated 
+              ? 'Exibindo valores combinados das empresas. Escolha uma empresa específica para editar lançamentos.' 
+              : 'Informe ou edite os valores de Compras e Vendas para cada competência'}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Alternador Rápido de Empresas */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700/60 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setSelectedCompanyId('all')}
+              className={cn(
+                "px-2.5 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer",
+                isConsolidated
+                  ? "bg-purple-600 text-white shadow-xs font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              )}
+            >
+              <Layers size={13} />
+              <span>Consolidado</span>
+            </button>
+            {companies.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedCompanyId(c.id)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md transition-all cursor-pointer truncate max-w-[120px]",
+                  selectedCompanyId === c.id
+                    ? "bg-white dark:bg-indigo-600 text-indigo-600 dark:text-white shadow-xs font-bold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                )}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+
           <select 
             value={selectedCompanyId}
             onChange={(e) => setSelectedCompanyId(e.target.value)}
-            className="bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 rounded-lg py-2 px-3 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 cursor-pointer min-w-[200px]"
+            className="md:hidden bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 rounded-lg py-2 px-3 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 cursor-pointer"
           >
+            <option value="all">🏢 Ambas as Empresas (Consolidação)</option>
             {companies.map(c => (
               <option key={c.id} value={c.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
                 {c.name}
@@ -1447,6 +2640,72 @@ function ModernEntriesView({
       {/* Grade de 12 Meses */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {MONTHS.map((month, idx) => {
+          if (isConsolidated) {
+            const monthEntries = companyEntries.filter(e => e.month === idx);
+            const totalP = monthEntries.reduce((a, b) => a + b.purchases, 0);
+            const totalS = monthEntries.reduce((a, b) => a + b.sales, 0);
+            const totalN = monthEntries.reduce((a, b) => a + b.notesCount, 0);
+            const allConcluded = monthEntries.length > 0 && monthEntries.every(e => e.status === 'CONCLUIDO');
+            const anyInProgress = monthEntries.some(e => e.status === 'EM ANDAMENTO');
+            const status: Entry['status'] = allConcluded ? 'CONCLUIDO' : (anyInProgress ? 'EM ANDAMENTO' : 'AGUARDANDO');
+
+            return (
+              <div key={idx} className="p-4 rounded-2xl bg-white dark:bg-[#0d1322] border border-slate-200/90 dark:border-slate-800/80 shadow-sm space-y-3 relative overflow-hidden">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">{month}</span>
+                  </div>
+                  <span className={cn(
+                    "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider",
+                    status === 'CONCLUIDO' 
+                      ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400" 
+                      : status === 'EM ANDAMENTO' 
+                        ? "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400" 
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                  )}>
+                    {status === 'CONCLUIDO' ? 'Fechado' : status === 'EM ANDAMENTO' ? 'Em Andamento' : 'Aguardando'}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 font-mono text-xs">
+                  <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/40 p-2 rounded-lg">
+                    <span className="text-[11px] text-slate-500 font-sans font-semibold">Total Vendas:</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatBRL(totalS)}</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/40 p-2 rounded-lg">
+                    <span className="text-[11px] text-slate-500 font-sans font-semibold">Total Compras:</span>
+                    <span className="font-bold text-indigo-600 dark:text-indigo-400">{formatBRL(totalP)}</span>
+                  </div>
+                </div>
+
+                {/* Sub-valores de cada empresa */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60 space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                    Editar por Empresa:
+                  </span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {companies.map(c => {
+                      const cEntry = monthEntries.find(e => e.companyId === c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setSelectedCompanyId(c.id)}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-purple-400 text-left text-[10px] transition-all bg-slate-50/50 dark:bg-slate-800/30 cursor-pointer"
+                          title={`Editar lançamentos de ${c.name} para ${month}`}
+                        >
+                          <div className="font-bold text-slate-800 dark:text-slate-200 truncate">{c.name}</div>
+                          <div className="font-mono text-emerald-600 dark:text-emerald-400 text-[9px]">{formatCompactBRL(cEntry?.sales || 0)}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
           const entry = companyEntries.find(e => e.month === idx);
           return (
             <ModernMonthCard 
@@ -2310,34 +3569,53 @@ function ReportModal({
   selectedYear: number
 }) {
   const [reportType, setReportType] = useState<'both' | 'sales' | 'purchases'>('both');
-  const selectedCompany = companies.find(c => c.id === selectedCompanyId);
+  const [targetCompanyId, setTargetCompanyId] = useState<string>(selectedCompanyId || 'all');
+
+  useEffect(() => {
+    setTargetCompanyId(selectedCompanyId || 'all');
+  }, [selectedCompanyId, isOpen]);
+
+  const isConsolidated = targetCompanyId === 'all';
+  const targetCompany = companies.find(c => c.id === targetCompanyId);
 
   const handleDownload = () => {
-    if (!selectedCompany) return;
-
     try {
       const doc = new jsPDF();
-      const companyEntries = entries.filter(e => e.companyId === selectedCompanyId && e.year === selectedYear);
+      const isBoth = targetCompanyId === 'all';
+      const companyEntries = isBoth 
+        ? entries.filter(e => e.year === selectedYear)
+        : entries.filter(e => e.companyId === targetCompanyId && e.year === selectedYear);
 
       // Cabeçalho Corporativo
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(18);
       doc.setTextColor(30, 41, 59);
-      doc.text('Relatório Gerencial Financeiro', 14, 20);
+      doc.text(isBoth ? 'Relatório Financeiro Consolidado' : 'Relatório Gerencial Financeiro', 14, 20);
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.setTextColor(100, 116, 139);
-      doc.text(`Empresa: ${selectedCompany.name}`, 14, 28);
-      doc.text(`CNPJ: ${selectedCompany.cnpj}`, 14, 34);
+      
+      const compName = isBoth 
+        ? `CONSOLIDAÇÃO GERAL (${companies.map(c => c.name).join(' & ')})` 
+        : (targetCompany?.name || 'Empresa');
+      const compCnpj = isBoth 
+        ? `Grupo Econômico Consolidado (${companies.map(c => `${c.name}: ${c.cnpj}`).join(' | ')})` 
+        : (targetCompany?.cnpj || '');
+
+      doc.text(`Empresa: ${compName}`, 14, 28);
+      doc.text(`CNPJ: ${compCnpj}`, 14, 34);
       doc.text(`Competência: ${selectedYear}`, 14, 40);
       doc.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 46);
 
-      // Montagem da Tabela
+      // Montagem da Tabela (com soma caso consolidado)
       const tableData = MONTHS.map((monthName, index) => {
-        const entry = companyEntries.find(e => e.month === index);
-        const compras = entry?.purchases || 0;
-        const vendas = entry?.sales || 0;
+        const monthList = isBoth
+          ? companyEntries.filter(e => e.month === index)
+          : companyEntries.filter(e => e.month === index);
+
+        const compras = monthList.reduce((a, b) => a + b.purchases, 0);
+        const vendas = monthList.reduce((a, b) => a + b.sales, 0);
         const resultado = vendas - compras;
 
         const row: any[] = [monthName];
@@ -2352,7 +3630,8 @@ function ReportModal({
           row.push(formatBRL(resultado));
         }
 
-        row.push(entry?.status === 'CONCLUIDO' ? 'Concluído' : 'Aguardando');
+        const allConcluded = monthList.length > 0 && monthList.every(e => e.status === 'CONCLUIDO');
+        row.push(allConcluded ? 'Concluído' : 'Aguardando / Em Aberto');
         return row;
       });
 
@@ -2367,7 +3646,7 @@ function ReportModal({
         head: [headers],
         body: tableData,
         theme: 'striped',
-        headStyles: { fillColor: [79, 70, 229], fontStyle: 'bold' },
+        headStyles: { fillColor: isBoth ? [124, 58, 237] : [79, 70, 229], fontStyle: 'bold' },
         styles: { fontSize: 9, cellPadding: 3 },
       });
 
@@ -2375,7 +3654,7 @@ function ReportModal({
       const totalCompras = companyEntries.reduce((acc, curr) => acc + curr.purchases, 0);
       const totalVendas = companyEntries.reduce((acc, curr) => acc + curr.sales, 0);
       const docAny = doc as any;
-      const finalY = (docAny.lastAutoTable?.finalY || 52) + 12;
+      let finalY = (docAny.lastAutoTable?.finalY || 52) + 10;
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
@@ -2393,9 +3672,36 @@ function ReportModal({
       if (reportType === 'both') {
         doc.setTextColor(totalVendas >= totalCompras ? 16 : 220, totalVendas >= totalCompras ? 185 : 38, totalVendas >= totalCompras ? 129 : 38);
         doc.text(`Resultado Líquido Final: ${formatBRL(totalVendas - totalCompras)}`, 14, curY);
+        curY += 8;
       }
 
-      doc.save(`relatorio_${selectedCompany.name.toLowerCase().replace(/\s+/g, '_')}_${selectedYear}.pdf`);
+      // Se consolidado, adicionar resumo individual de cada empresa
+      if (isBoth && companies.length > 1) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(88, 28, 135);
+        doc.text('Detalhamento por Empresa Integrante:', 14, curY);
+        curY += 6;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(71, 85, 105);
+
+        companies.forEach(comp => {
+          const cEnts = entries.filter(e => e.companyId === comp.id && e.year === selectedYear);
+          const cV = cEnts.reduce((a, b) => a + b.sales, 0);
+          const cP = cEnts.reduce((a, b) => a + b.purchases, 0);
+          const cM = cV - cP;
+          doc.text(`• ${comp.name} (${comp.cnpj}): Vendas: ${formatBRL(cV)} | Compras: ${formatBRL(cP)} | Margem: ${formatBRL(cM)}`, 14, curY);
+          curY += 5;
+        });
+      }
+
+      const fileName = isBoth 
+        ? `relatorio_consolidado_ambas_empresas_${selectedYear}.pdf`
+        : `relatorio_${(targetCompany?.name || 'empresa').toLowerCase().replace(/\s+/g, '_')}_${selectedYear}.pdf`;
+
+      doc.save(fileName);
       onClose();
     } catch (err) {
       console.error('Erro ao gerar PDF:', err);
@@ -2410,18 +3716,55 @@ function ReportModal({
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white">Exportar Relatório PDF</h3>
-            <p className="text-xs text-slate-500">Selecione os parâmetros de consolidação</p>
+            <p className="text-xs text-slate-500">Selecione os parâmetros e o escopo de consolidação</p>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 cursor-pointer">
             <X size={18} />
           </button>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-semibold text-slate-500 block mb-1">Empresa</label>
-            <div className="text-sm font-bold text-slate-900 dark:text-white">
-              {selectedCompany?.name || 'Selecione uma empresa'}
+            <label className="text-xs font-semibold text-slate-500 block mb-1.5 uppercase tracking-wider">
+              Empresa / Escopo do Relatório
+            </label>
+            <div className="grid grid-cols-1 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setTargetCompanyId('all')}
+                className={cn(
+                  "p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all cursor-pointer",
+                  targetCompanyId === 'all'
+                    ? "border-purple-600 bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold shadow-xs"
+                    : "border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <Layers size={14} className="text-purple-600 dark:text-purple-400" />
+                  <span>🏢 Ambas as Empresas (Consolidação Geral)</span>
+                </div>
+                {targetCompanyId === 'all' && <Check size={14} className="text-purple-600" />}
+              </button>
+
+              {companies.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setTargetCompanyId(c.id)}
+                  className={cn(
+                    "p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all cursor-pointer",
+                    targetCompanyId === c.id
+                      ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 font-bold shadow-xs"
+                      : "border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.color }} />
+                    <span>{c.name} ({c.cnpj})</span>
+                  </div>
+                  {targetCompanyId === c.id && <Check size={14} className="text-indigo-600" />}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -2429,7 +3772,7 @@ function ReportModal({
             <label className="text-xs font-semibold text-slate-500 block mb-1">Tipo de Demonstrativo</label>
             <div className="grid grid-cols-1 gap-2">
               {[
-                { id: 'both', label: 'Completo (Compras, Vendas e Margem)' },
+                { id: 'both', label: 'Completo (Compras, Vendas e Margem Líquida)' },
                 { id: 'sales', label: 'Apenas Faturamento (Vendas)' },
                 { id: 'purchases', label: 'Apenas Custos (Compras)' }
               ].map(opt => (
@@ -2437,7 +3780,7 @@ function ReportModal({
                   key={opt.id}
                   onClick={() => setReportType(opt.id as any)}
                   className={cn(
-                    "p-3 rounded-xl border text-xs font-semibold text-left transition-all",
+                    "p-3 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer",
                     reportType === opt.id 
                       ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 font-bold" 
                       : "border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40"
@@ -2452,9 +3795,9 @@ function ReportModal({
           <div className="pt-2">
             <button
               onClick={handleDownload}
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
             >
-              <Download size={16} /> Gerar e Baixar PDF
+              <Download size={16} /> Gerar e Baixar PDF Consolidado
             </button>
           </div>
         </div>
@@ -2484,27 +3827,37 @@ function SidebarNavButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all group",
+        "relative flex items-center justify-between w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 group cursor-pointer",
         active
-          ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 font-bold"
-          : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+          ? "bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 text-white font-bold shadow-md shadow-purple-950/60 border border-purple-400/40 ring-1 ring-white/10"
+          : "text-purple-100/90 hover:bg-purple-800/40 hover:text-white"
       )}
     >
       <div className="flex items-center gap-3 min-w-0">
         <span className={cn(
-          "transition-colors",
-          active ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200"
+          "transition-colors duration-150",
+          active ? "text-white drop-shadow-xs" : "text-purple-300 group-hover:text-purple-100"
         )}>
           {icon}
         </span>
         <span className="truncate">{label}</span>
       </div>
 
-      {badge && (
-        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-          {badge}
-        </span>
-      )}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {badge && (
+          <span className={cn(
+            "text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors",
+            active 
+              ? "bg-white/20 text-white border border-white/30" 
+              : "bg-purple-900/80 text-purple-200 border border-purple-700/60 group-hover:border-purple-600"
+          )}>
+            {badge}
+          </span>
+        )}
+        {active && (
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/80 animate-pulse" />
+        )}
+      </div>
     </button>
   );
 }
